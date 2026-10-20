@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-RepoGraph (SlothEdition) - Zero-Read Codebase Onboarding
-Generates interactive architectural blueprints from local codebases using AST + Local Open-Weight LLMs.
+RepoGraph - Zero-Read Codebase Architecture Intelligence
+Deterministic AST dependency analysis + Open-Weight Local LLM synthesis.
 Zero third-party pip dependencies required.
 """
 
@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 import webbrowser
 import urllib.request
 import urllib.error
@@ -17,7 +18,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any, Optional
 
-# Battle-tested fix: Ensure UTF-8 output on Windows consoles to prevent cp1252 charmap crashes
+# Ensure UTF-8 output on Windows consoles to prevent cp1252 charmap crashes
 if sys.platform == "win32":
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -40,13 +41,61 @@ def sanitize_id(name: str) -> str:
         cleaned = f"n_{cleaned}"
     return cleaned or "node_root"
 
+def resolve_repo_name(target_path: Path) -> str:
+    """
+    Intelligently determine a clean, professional project name.
+    Avoids generic names like 'dev 4', '.', or temp folders.
+    """
+    # 1. Try git remote
+    try:
+        res = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            cwd=str(target_path),
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            url = res.stdout.strip()
+            name = url.split("/")[-1].replace(".git", "").strip()
+            clean_name = re.sub(r'[-_]+$', '', name)
+            if clean_name:
+                return clean_name
+    except Exception:
+        pass
+
+    # 2. Try pyproject.toml or setup.cfg
+    for config_file in ["pyproject.toml", "setup.cfg", "package.json"]:
+        p = target_path / config_file
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                m = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
+                if m:
+                    return m.group(1).strip()
+            except Exception:
+                pass
+
+    # 3. Check target directory name
+    dir_name = target_path.name
+    generic_names = {".", "dev", "dev 4", "src", "app", "code", "repo", "test", "demo"}
+    if dir_name.lower() in generic_names or dir_name.isdigit():
+        return "RepoGraph"
+
+    clean_dir = re.sub(r'[-_]+$', '', dir_name)
+    return clean_dir or "RepoGraph"
+
 class CodebaseVisitor(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self, file_path: Path, repo_root: Path):
+        self.file_path = file_path
+        self.repo_root = repo_root
+        self.rel_path = file_path.relative_to(repo_root)
         self.classes = []
         self.class_details = {}
         self.functions = []
-        self.imports = []
-        self.from_imports = []
+        self.function_details = {}
+        self.raw_imports = []
         self.docstring = ""
         self.has_main = False
         self.complexity_score = 1
@@ -63,23 +112,39 @@ class CodebaseVisitor(ast.NodeVisitor):
         for item in node.body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not item.name.startswith("__"):
-                    methods.append(item.name)
+                    args_list = [a.arg for a in item.args.args if a.arg != "self"]
+                    args_str = ", ".join(args_list[:3])
+                    methods.append(f"{item.name}({args_str})")
+        
+        bases = []
+        for b in node.bases:
+            if isinstance(b, ast.Name):
+                bases.append(b.id)
+            elif isinstance(b, ast.Attribute):
+                bases.append(b.attr)
+
         self.class_details[node.name] = {
             "methods": methods[:6],
-            "bases": [b.id for b in node.bases if isinstance(b, ast.Name)]
+            "bases": bases
         }
         self.complexity_score += 2
         self.generic_visit(node)
 
     def visit_FunctionDef(self, node):
         if not node.name.startswith("_"):
-            self.functions.append(node.name)
+            args_list = [a.arg for a in node.args.args if a.arg != "self"]
+            args_str = ", ".join(args_list[:3])
+            sig = f"{node.name}({args_str})"
+            self.functions.append(sig)
         self.complexity_score += 1
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node):
         if not node.name.startswith("_"):
-            self.functions.append(f"async {node.name}")
+            args_list = [a.arg for a in node.args.args if a.arg != "self"]
+            args_str = ", ".join(args_list[:3])
+            sig = f"async {node.name}({args_str})"
+            self.functions.append(sig)
         self.complexity_score += 1
         self.generic_visit(node)
 
@@ -101,12 +166,13 @@ class CodebaseVisitor(ast.NodeVisitor):
 
     def visit_Import(self, node):
         for alias in node.names:
-            self.imports.append(alias.name)
+            self.raw_imports.append((alias.name, None, 0))
 
     def visit_ImportFrom(self, node):
-        if node.module:
-            self.from_imports.append(node.module)
-            self.imports.append(node.module)
+        level = node.level or 0
+        mod = node.module or ""
+        for alias in node.names:
+            self.raw_imports.append((mod, alias.name, level))
 
 def classify_layer(rel_path: str, visitor: CodebaseVisitor) -> str:
     """Classify file into architectural layer based on path conventions and content."""
@@ -135,7 +201,7 @@ def count_file_lines(path: Path) -> int:
         return 0
 
 def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
-    """Simple cycle detection on internal dependencies graph."""
+    """Detect circular dependency cycles in module graph."""
     cycles = []
     visited = set()
     rec_stack = set()
@@ -152,7 +218,9 @@ def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
                 dfs(dep)
             elif dep in rec_stack:
                 cycle_start = current_path.index(dep)
-                cycles.append(current_path[cycle_start:] + [dep])
+                cycle = current_path[cycle_start:] + [dep]
+                if cycle not in cycles and len(cycle) > 2:
+                    cycles.append(cycle)
 
         current_path.pop()
         rec_stack.remove(node)
@@ -166,7 +234,6 @@ def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
 def scan_repository(repo_path: Path) -> Dict[str, Any]:
     repo_path = repo_path.resolve()
     codebase_summary: Dict[str, Any] = {}
-    local_modules = set()
     module_to_file: Dict[str, str] = {}
 
     py_files: List[Path] = []
@@ -176,16 +243,29 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
             if file.endswith(".py"):
                 py_files.append(Path(root) / file)
 
+    # 1. Build comprehensive module mapping (including packages and __init__.py)
     for p in py_files:
-        rel = p.relative_to(repo_path).with_suffix("")
-        # Windows fix: use as_posix() to prevent backslash breakage
-        mod_name = rel.as_posix().replace("/", ".")
-        local_modules.add(mod_name)
+        rel = p.relative_to(repo_path)
+        rel_posix = rel.as_posix()
+        
+        # mod name from relative path
+        rel_no_ext = rel.with_suffix("")
+        mod_name = rel_no_ext.as_posix().replace("/", ".")
         short_name = mod_name.split(".")[-1]
-        local_modules.add(short_name)
-        module_to_file[mod_name] = p.relative_to(repo_path).as_posix()
-        module_to_file[short_name] = p.relative_to(repo_path).as_posix()
+        
+        module_to_file[mod_name] = rel_posix
+        module_to_file[short_name] = rel_posix
 
+        # Special handling for package __init__.py
+        if p.name == "__init__.py":
+            pkg_path = p.parent.relative_to(repo_path)
+            pkg_mod = pkg_path.as_posix().replace("/", ".")
+            if pkg_mod and pkg_mod != ".":
+                module_to_file[pkg_mod] = rel_posix
+                module_to_file[pkg_mod.split(".")[-1]] = rel_posix
+
+    # 2. Parse AST for each file
+    visitors: Dict[str, CodebaseVisitor] = {}
     for p in py_files:
         rel_posix = p.relative_to(repo_path).as_posix()
         loc = count_file_lines(p)
@@ -193,20 +273,9 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
             with open(p, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
             tree = ast.parse(content, filename=str(p))
-            visitor = CodebaseVisitor()
+            visitor = CodebaseVisitor(p, repo_path)
             visitor.visit(tree)
-
-            internal_deps = set()
-            for imp in visitor.imports:
-                base_imp = imp.split(".")[0]
-                if imp in local_modules:
-                    target = module_to_file.get(imp)
-                    if target and target != rel_posix:
-                        internal_deps.add(target)
-                elif base_imp in local_modules:
-                    target = module_to_file.get(base_imp)
-                    if target and target != rel_posix:
-                        internal_deps.add(target)
+            visitors[rel_posix] = visitor
 
             layer = classify_layer(rel_posix, visitor)
 
@@ -219,7 +288,7 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
                 "class_details": visitor.class_details,
                 "functions": visitor.functions[:8],
                 "all_functions_count": len(visitor.functions),
-                "internal_dependencies": sorted(list(internal_deps)),
+                "internal_dependencies": [],
                 "has_entry_point": visitor.has_main or rel_posix.endswith(("main.py", "app.py", "cli.py")),
                 "loc": loc,
                 "complexity": min(visitor.complexity_score, 100),
@@ -228,7 +297,59 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
         except Exception:
             continue
 
-    # Compute reverse dependencies (imported_by)
+    # 3. Resolve internal dependencies with relative import support
+    for p in py_files:
+        rel_posix = p.relative_to(repo_path).as_posix()
+        if rel_posix not in codebase_summary:
+            continue
+
+        visitor = visitors.get(rel_posix)
+        if not visitor:
+            continue
+
+        internal_deps = set()
+        file_parent = p.parent.relative_to(repo_path)
+
+        for mod_name, item_name, level in visitor.raw_imports:
+            # Handle relative imports (from . import x, from ..foo import bar)
+            if level > 0:
+                curr_dir = file_parent
+                for _ in range(level - 1):
+                    curr_dir = curr_dir.parent
+                
+                prefix = curr_dir.as_posix().replace("/", ".")
+                target_candidates = []
+                if mod_name:
+                    full_mod = f"{prefix}.{mod_name}" if prefix and prefix != "." else mod_name
+                    target_candidates.append(full_mod)
+                    if item_name:
+                        target_candidates.append(f"{full_mod}.{item_name}")
+                elif item_name:
+                    full_item = f"{prefix}.{item_name}" if prefix and prefix != "." else item_name
+                    target_candidates.append(full_item)
+                    target_candidates.append(item_name)
+
+                for cand in target_candidates:
+                    if cand in module_to_file and module_to_file[cand] != rel_posix:
+                        internal_deps.add(module_to_file[cand])
+            else:
+                # Absolute imports
+                candidates = []
+                if mod_name:
+                    candidates.append(mod_name)
+                    candidates.append(mod_name.split(".")[0])
+                    if item_name:
+                        candidates.append(f"{mod_name}.{item_name}")
+                elif item_name:
+                    candidates.append(item_name)
+
+                for cand in candidates:
+                    if cand in module_to_file and module_to_file[cand] != rel_posix:
+                        internal_deps.add(module_to_file[cand])
+
+        codebase_summary[rel_posix]["internal_dependencies"] = sorted(list(internal_deps))
+
+    # 4. Compute reverse dependencies (imported_by)
     for file, data in codebase_summary.items():
         for dep in data["internal_dependencies"]:
             if dep in codebase_summary and file not in codebase_summary[dep]["imported_by"]:
@@ -326,7 +447,8 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
             if data["classes"]:
                 label_parts.append(f"📦 {', '.join(data['classes'][:2])}")
             elif data["functions"]:
-                label_parts.append(f"⚡ {', '.join(data['functions'][:2])}")
+                clean_funcs = [f.split('(')[0] for f in data["functions"][:2]]
+                label_parts.append(f"⚡ {', '.join(clean_funcs)}")
             
             clean_label = " | ".join(label_parts).replace('"', "'")
             style_class = layer_styles.get(layer_name, "defaultNode")
@@ -350,7 +472,7 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
 
     return "\n".join(lines)
 
-def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any], ollama_info: Dict[str, Any]) -> str:
+def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any], ollama_info: Dict[str, Any]) -> str:
     summary_json = json.dumps(summary, indent=None)
     ollama_json = json.dumps(ollama_info, indent=None)
     cycles = detect_circular_dependencies(summary)
@@ -362,7 +484,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     total_loc = sum(d["loc"] for d in summary.values())
     total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
 
-    model_label = f"AI Model: {ollama_info.get('model', 'Local')}" if ollama_info.get("online") else "Engine: Deterministic AST"
+    model_label = f"AI: {ollama_info.get('model', 'Local')}" if ollama_info.get("online") else "Engine: Deterministic AST"
     dot_class = "" if ollama_info.get("online") else "warning"
 
     return f"""<!DOCTYPE html>
@@ -373,21 +495,21 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
   <title>RepoGraph - {repo_name} | Architecture Intelligence</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
   <style>
     :root {{
-      --bg-base: #07090e;
-      --bg-surface: #0d121f;
-      --bg-surface-elevated: #131b2e;
+      --bg-base: #06080e;
+      --bg-surface: #0c111d;
+      --bg-surface-elevated: #12192c;
       --border: #1e293b;
       --border-focus: #38bdf8;
-      --text-main: #f1f5f9;
+      --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --text-faint: #475569;
       --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.25);
+      --accent-glow: rgba(56, 189, 248, 0.28);
       --emerald: #34d399;
       --amber: #fbbf24;
       --indigo: #818cf8;
@@ -397,14 +519,14 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     }}
 
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    
+
     body {{
       background-color: var(--bg-base);
       background-image: 
-        radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(129, 140, 248, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(129, 140, 248, 0.06) 0%, transparent 45%),
         radial-gradient(#1e293b 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 28px 28px;
+      background-size: 100% 100%, 100% 100%, 30px 30px;
       color: var(--text-main);
       font-family: var(--font-ui);
       height: 100vh;
@@ -415,7 +537,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
 
     header.top-nav {{
       height: 64px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
@@ -434,20 +556,20 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     }}
 
     .logo-badge {{
-      width: 38px;
-      height: 38px;
+      width: 40px;
+      height: 40px;
       border-radius: 10px;
       background: linear-gradient(135deg, #0284c7, #6366f1);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      box-shadow: 0 0 16px var(--accent-glow);
+      font-size: 22px;
+      box-shadow: 0 0 20px var(--accent-glow);
     }}
 
     .title-group h1 {{
       font-size: 18px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: -0.3px;
       display: flex;
       align-items: center;
@@ -469,7 +591,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 5px 12px;
+      padding: 6px 12px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 500;
@@ -512,7 +634,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       background: #1e293b;
       border-color: var(--accent);
       color: #ffffff;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
     }}
 
     .btn-primary {{
@@ -524,7 +646,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
 
     .btn-primary:hover {{
       background: linear-gradient(135deg, #0369a1, #1d4ed8);
-      box-shadow: 0 0 14px var(--accent-glow);
+      box-shadow: 0 0 16px var(--accent-glow);
     }}
 
     .workspace {{
@@ -536,19 +658,21 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
 
     aside.sidebar {{
       width: 320px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(12px);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       z-index: 20;
-      transition: transform 0.25s ease;
       flex-shrink: 0;
     }}
 
     .sidebar-header {{
-      padding: 16px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }}
 
     .search-box {{
@@ -615,7 +739,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     }}
 
     .layer-filters {{
-      padding: 12px 16px 6px;
+      padding: 10px 16px 6px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
@@ -694,7 +818,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     main.viewport {{
       flex: 1;
       position: relative;
-      background: #090d16;
+      background: #07090e;
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -709,21 +833,13 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       align-items: center;
     }}
 
-    .mermaid {{
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }}
-
     .viewport-controls {{
       position: absolute;
       top: 16px;
       right: 16px;
       display: flex;
       gap: 6px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(8px);
       padding: 6px;
       border-radius: 10px;
@@ -757,7 +873,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       position: absolute;
       bottom: 16px;
       left: 16px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(8px);
       padding: 6px 14px;
       border-radius: 20px;
@@ -770,7 +886,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
 
     aside.inspector {{
       width: 360px;
-      background: rgba(13, 18, 31, 0.95);
+      background: rgba(12, 17, 29, 0.95);
       backdrop-filter: blur(16px);
       border-left: 1px solid var(--border);
       display: flex;
@@ -867,7 +983,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 14px;
-      max-width: 650px;
+      max-width: 680px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
@@ -888,7 +1004,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 12px 16px;
+      padding: 14px 16px;
       margin-top: 12px;
     }}
 
@@ -926,12 +1042,8 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       opacity: 1;
     }}
 
-    svg {{
-      cursor: grab;
-    }}
-    svg:active {{
-      cursor: grabbing;
-    }}
+    svg {{ cursor: grab; }}
+    svg:active {{ cursor: grabbing; }}
   </style>
 </head>
 <body>
@@ -951,15 +1063,19 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
         <span>{model_label}</span>
       </div>
       
-      <button class="btn" id="btn-sloth" onclick="openSlothModal()">
-        <span>🦥 30s Lazy Guide</span>
+      <button class="btn" onclick="openSlothModal()">
+        <span>🦥 30s Guide</span>
       </button>
 
-      <button class="btn" id="btn-copy-mermaid" onclick="copyMermaid()">
+      <button class="btn" onclick="copyMermaid()">
         <span>📋 Copy Mermaid</span>
       </button>
 
-      <button class="btn btn-primary" id="btn-export-md" onclick="downloadMarkdown()">
+      <button class="btn" onclick="downloadSVG()">
+        <span>🖼️ Export SVG</span>
+      </button>
+
+      <button class="btn btn-primary" onclick="downloadMarkdown()">
         <span>⬇ Export ARCHITECTURE.md</span>
       </button>
     </div>
@@ -1010,7 +1126,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       </div>
 
       <div id="graph-container">
-        <div class="mermaid" id="mermaid-root">
+        <div class="mermaid" id="mermaid-render-target">
 {mermaid_code}
         </div>
       </div>
@@ -1079,7 +1195,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
         <button class="control-btn" onclick="closeSlothModal()">✕</button>
       </div>
       <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-        Everything you need to know about <strong>{repo_name}</strong> without reading the source code.
+        Everything you need to know about <strong>{repo_name}</strong> without reading any code.
       </p>
 
       <div class="guide-step">
@@ -1099,7 +1215,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
 
       <div class="guide-step">
         <h4>🛠️ 4. How to Extend This Codebase</h4>
-        <p id="sloth-extend-text">Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
+        <p>Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
       </div>
 
       <div style="margin-top: 18px; text-align: right;">
@@ -1126,7 +1242,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       securityLevel: 'loose',
       themeVariables: {{
         darkMode: true,
-        background: '#090d16',
+        background: '#07090e',
         primaryColor: '#0284c7',
         primaryTextColor: '#f8fafc',
         lineColor: '#38bdf8'
@@ -1157,15 +1273,60 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       const nodes = document.querySelectorAll("#graph-viewport svg .node");
       nodes.forEach(node => {{
         node.style.cursor = "pointer";
-        node.addEventListener("click", () => {{
+        node.addEventListener("click", (e) => {{
+          e.stopPropagation();
           const id = node.id.replace(/^flowchart-/, '').split('-')[0];
           for (const [file, data] of Object.entries(SUMMARY)) {{
             if (data.id === id || node.id.includes(data.id)) {{
               inspectModule(file);
+              highlightNodeConnections(data.id);
               break;
             }}
           }}
         }});
+      }});
+
+      // Reset highlights when clicking background
+      const svgEl = document.querySelector("#graph-viewport svg");
+      if (svgEl) {{
+        svgEl.addEventListener("click", () => {{
+          resetHighlights();
+        }});
+      }}
+    }}
+
+    function highlightNodeConnections(nodeId) {{
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+
+      const nodes = svg.querySelectorAll(".node");
+      const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
+
+      nodes.forEach(n => {{
+        if (n.id.includes(nodeId)) {{
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #38bdf8)";
+        }} else {{
+          n.style.opacity = "0.3";
+          n.style.filter = "none";
+        }}
+      }});
+
+      edges.forEach(e => {{
+        if (e.id && e.id.includes(nodeId)) {{
+          e.style.opacity = "1";
+        }} else {{
+          e.style.opacity = "0.2";
+        }}
+      }});
+    }}
+
+    function resetHighlights() {{
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+      svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {{
+        el.style.opacity = "1";
+        el.style.filter = "none";
       }});
     }}
 
@@ -1181,7 +1342,10 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
         const item = document.createElement("div");
         item.className = "module-item";
         item.id = `mod-item-${{data.id}}`;
-        item.onclick = () => inspectModule(file);
+        item.onclick = () => {{
+          inspectModule(file);
+          highlightNodeConnections(data.id);
+        }};
 
         item.innerHTML = `
           <div class="module-title">
@@ -1214,11 +1378,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       for (const [file, data] of Object.entries(SUMMARY)) {{
         const item = document.getElementById(`mod-item-${{data.id}}`);
         if (!item) continue;
-        if (layer === "ALL" || data.layer === layer) {{
-          item.style.display = "block";
-        }} else {{
-          item.style.display = "none";
-        }}
+        item.style.display = (layer === "ALL" || data.layer === layer) ? "block" : "none";
       }}
     }}
 
@@ -1264,7 +1424,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {{
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${{f}}()</span>`).join("");
+        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${{f}}</span>`).join("");
       }} else {{
         document.getElementById("insp-functions-section").style.display = "none";
       }}
@@ -1272,7 +1432,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       const depsContainer = document.getElementById("insp-deps");
       if (data.internal_dependencies.length > 0) {{
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${{d}}')">
+          <div class="dep-link" onclick="inspectModule('${{d}}'); highlightNodeConnections('${{SUMMARY[d]?.id}}');">
             <span>↳ ${{d}}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
@@ -1284,7 +1444,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       const impByContainer = document.getElementById("insp-imported-by");
       if (data.imported_by && data.imported_by.length > 0) {{
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${{ib}}')">
+          <div class="dep-link" onclick="inspectModule('${{ib}}'); highlightNodeConnections('${{SUMMARY[ib]?.id}}');">
             <span>↲ ${{ib}}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
@@ -1299,6 +1459,7 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
     function closeInspector() {{
       document.getElementById("inspector-drawer").classList.remove("open");
       document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
+      resetHighlights();
     }}
 
     function zoomIn() {{ if (panZoomInstance) panZoomInstance.zoomIn(); }}
@@ -1312,11 +1473,11 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       const apiFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("API") || d.layer.includes("Interface")).map(([f]) => f);
 
       document.getElementById("sloth-entry-text").innerText = entryPoints.length 
-        ? `Start execution at: ${{entryPoints.join(", ")}}. This is where CLI/Server initialization takes place.`
+        ? `Start execution at: ${{entryPoints.join(", ")}}. This is where initialization takes place.`
         : `No explicit entry point file found. Inspect top-level scripts or root modules.`;
 
       document.getElementById("sloth-core-text").innerText = coreFiles.length 
-        ? `The heart of the application logic is encapsulated in: ${{coreFiles.join(", ")}}. Look here to understand core domain algorithms.`
+        ? `The heart of domain logic is encapsulated in: ${{coreFiles.join(", ")}}. Look here to understand core domain algorithms.`
         : `Domain logic is distributed among the internal modules. Inspect dependencies in the center graph.`;
 
       document.getElementById("sloth-api-text").innerText = apiFiles.length
@@ -1356,6 +1517,41 @@ def build_interactive_html(mermaid_code: str, repo_name: str, summary: Dict[str,
       showToast("📥 ARCHITECTURE.md downloaded!");
     }}
 
+    function downloadSVG() {{
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+      const serializer = new XMLSerializer();
+      const source = serializer.serializeToString(svg);
+      const blob = new Blob([source], {{ type: "image/svg+xml;charset=utf-8" }});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${{REPO_NAME}}-architecture.svg`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("🖼️ SVG exported successfully!");
+    }}
+
+    // Keyboard shortcuts
+    window.addEventListener("keydown", (e) => {{
+      if (e.key === "Escape") {{
+        closeInspector();
+        closeSlothModal();
+      }} else if ((e.metaKey || e.ctrlKey) && e.key === "k") {{
+        e.preventDefault();
+        document.getElementById("module-search")?.focus();
+      }}
+    }});
+
+    // Auto-resize pan-zoom on window resize
+    window.addEventListener("resize", () => {{
+      if (panZoomInstance) {{
+        panZoomInstance.resize();
+        panZoomInstance.fit();
+        panZoomInstance.center();
+      }}
+    }});
+
     initSidebar();
   </script>
 </body>
@@ -1369,8 +1565,8 @@ def serve_directory(port: int = 8080):
             pass
 
     server = HTTPServer(('localhost', port), QuietHandler)
-    url = f"http://localhost:{port}/repograph.html"
-    print(f"\n🚀 RepoGraph Live Server running at: {url}")
+    url = f"http://localhost:{port}/index.html"
+    print(f"\n🚀 RepoGraph Studio Live Server running at: {url}")
     print("   Press Ctrl+C to stop server.\n")
     try:
         webbrowser.open(url)
@@ -1392,10 +1588,10 @@ def main():
             break
 
     target_path = Path(target_dir).resolve()
-    repo_name = target_path.name
+    repo_name = resolve_repo_name(target_path)
 
     print("\n" + "=" * 62)
-    print(" [RepoGraph] (SlothEdition) - Zero-Read Codebase Onboarding")
+    print(f" [RepoGraph] - Architecture Intelligence: {repo_name}")
     print("=" * 62)
 
     print(f"\n[1/3] Parsing AST for repository: {repo_name}...")
@@ -1455,17 +1651,21 @@ Strict Rules:
 
     print("[3/3] Exporting artifacts...")
     
+    # 1. ARCHITECTURE.md (Markdown graph that renders natively on GitHub)
     with open("ARCHITECTURE.md", "w", encoding="utf-8") as f:
         f.write(f"# Architecture Overview: {repo_name}\n\n```mermaid\n{mermaid_code}\n```\n")
 
+    # 2. Both repograph.html and index.html are generated with this exact dataset!
     ollama_status = {"online": ollama_online, "model": model_to_use}
-    html_page = build_interactive_html(mermaid_code, repo_name, summary, ollama_status)
+    html_page = build_unified_html(mermaid_code, repo_name, summary, ollama_status)
     with open("repograph.html", "w", encoding="utf-8") as f:
         f.write(html_page)
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_page)
 
-    print("\n[OK] Success! All artifacts generated:")
-    print("  Markdown:    ARCHITECTURE.md (Renders natively on GitHub)")
-    print("  Interactive: repograph.html (Pan/Zoom & Codebase Inspector enabled)\n")
+    print("\n[OK] Success! All artifacts generated & synchronized:")
+    print("  📄 Markdown:    ARCHITECTURE.md (Renders natively on GitHub)")
+    print("  🌐 Interactive: repograph.html & index.html (Live Web & GitHub Pages)\n")
 
     if should_serve:
         serve_directory()

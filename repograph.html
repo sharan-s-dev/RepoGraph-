@@ -6,21 +6,21 @@
   <title>RepoGraph - demo_project | Architecture Intelligence</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
   <style>
     :root {
-      --bg-base: #07090e;
-      --bg-surface: #0d121f;
-      --bg-surface-elevated: #131b2e;
+      --bg-base: #06080e;
+      --bg-surface: #0c111d;
+      --bg-surface-elevated: #12192c;
       --border: #1e293b;
       --border-focus: #38bdf8;
-      --text-main: #f1f5f9;
+      --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --text-faint: #475569;
       --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.25);
+      --accent-glow: rgba(56, 189, 248, 0.28);
       --emerald: #34d399;
       --amber: #fbbf24;
       --indigo: #818cf8;
@@ -30,14 +30,14 @@
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
+
     body {
       background-color: var(--bg-base);
       background-image: 
-        radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.05) 0%, transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(129, 140, 248, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(129, 140, 248, 0.06) 0%, transparent 45%),
         radial-gradient(#1e293b 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 28px 28px;
+      background-size: 100% 100%, 100% 100%, 30px 30px;
       color: var(--text-main);
       font-family: var(--font-ui);
       height: 100vh;
@@ -48,7 +48,7 @@
 
     header.top-nav {
       height: 64px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
@@ -67,20 +67,20 @@
     }
 
     .logo-badge {
-      width: 38px;
-      height: 38px;
+      width: 40px;
+      height: 40px;
       border-radius: 10px;
       background: linear-gradient(135deg, #0284c7, #6366f1);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      box-shadow: 0 0 16px var(--accent-glow);
+      font-size: 22px;
+      box-shadow: 0 0 20px var(--accent-glow);
     }
 
     .title-group h1 {
       font-size: 18px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: -0.3px;
       display: flex;
       align-items: center;
@@ -102,7 +102,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 5px 12px;
+      padding: 6px 12px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 500;
@@ -145,7 +145,7 @@
       background: #1e293b;
       border-color: var(--accent);
       color: #ffffff;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
     }
 
     .btn-primary {
@@ -157,7 +157,7 @@
 
     .btn-primary:hover {
       background: linear-gradient(135deg, #0369a1, #1d4ed8);
-      box-shadow: 0 0 14px var(--accent-glow);
+      box-shadow: 0 0 16px var(--accent-glow);
     }
 
     .workspace {
@@ -169,19 +169,21 @@
 
     aside.sidebar {
       width: 320px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(12px);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       z-index: 20;
-      transition: transform 0.25s ease;
       flex-shrink: 0;
     }
 
     .sidebar-header {
-      padding: 16px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .search-box {
@@ -248,7 +250,7 @@
     }
 
     .layer-filters {
-      padding: 12px 16px 6px;
+      padding: 10px 16px 6px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
@@ -327,7 +329,7 @@
     main.viewport {
       flex: 1;
       position: relative;
-      background: #090d16;
+      background: #07090e;
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -342,21 +344,13 @@
       align-items: center;
     }
 
-    .mermaid {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
     .viewport-controls {
       position: absolute;
       top: 16px;
       right: 16px;
       display: flex;
       gap: 6px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(8px);
       padding: 6px;
       border-radius: 10px;
@@ -390,7 +384,7 @@
       position: absolute;
       bottom: 16px;
       left: 16px;
-      background: rgba(13, 18, 31, 0.85);
+      background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(8px);
       padding: 6px 14px;
       border-radius: 20px;
@@ -403,7 +397,7 @@
 
     aside.inspector {
       width: 360px;
-      background: rgba(13, 18, 31, 0.95);
+      background: rgba(12, 17, 29, 0.95);
       backdrop-filter: blur(16px);
       border-left: 1px solid var(--border);
       display: flex;
@@ -500,7 +494,7 @@
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 14px;
-      max-width: 650px;
+      max-width: 680px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
@@ -521,7 +515,7 @@
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 12px 16px;
+      padding: 14px 16px;
       margin-top: 12px;
     }
 
@@ -559,12 +553,8 @@
       opacity: 1;
     }
 
-    svg {
-      cursor: grab;
-    }
-    svg:active {
-      cursor: grabbing;
-    }
+    svg { cursor: grab; }
+    svg:active { cursor: grabbing; }
   </style>
 </head>
 <body>
@@ -584,15 +574,19 @@
         <span>Engine: Deterministic AST</span>
       </div>
       
-      <button class="btn" id="btn-sloth" onclick="openSlothModal()">
-        <span>🦥 30s Lazy Guide</span>
+      <button class="btn" onclick="openSlothModal()">
+        <span>🦥 30s Guide</span>
       </button>
 
-      <button class="btn" id="btn-copy-mermaid" onclick="copyMermaid()">
+      <button class="btn" onclick="copyMermaid()">
         <span>📋 Copy Mermaid</span>
       </button>
 
-      <button class="btn btn-primary" id="btn-export-md" onclick="downloadMarkdown()">
+      <button class="btn" onclick="downloadSVG()">
+        <span>🖼️ Export SVG</span>
+      </button>
+
+      <button class="btn btn-primary" onclick="downloadMarkdown()">
         <span>⬇ Export ARCHITECTURE.md</span>
       </button>
     </div>
@@ -643,7 +637,7 @@
       </div>
 
       <div id="graph-container">
-        <div class="mermaid" id="mermaid-root">
+        <div class="mermaid" id="mermaid-render-target">
 graph TD
   %% RepoGraph Architectural Blueprint
   classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
@@ -744,7 +738,7 @@ graph TD
         <button class="control-btn" onclick="closeSlothModal()">✕</button>
       </div>
       <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-        Everything you need to know about <strong>demo_project</strong> without reading the source code.
+        Everything you need to know about <strong>demo_project</strong> without reading any code.
       </p>
 
       <div class="guide-step">
@@ -764,7 +758,7 @@ graph TD
 
       <div class="guide-step">
         <h4>🛠️ 4. How to Extend This Codebase</h4>
-        <p id="sloth-extend-text">Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
+        <p>Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
       </div>
 
       <div style="margin-top: 18px; text-align: right;">
@@ -776,7 +770,7 @@ graph TD
   <div id="toast">Mermaid markdown copied to clipboard!</div>
 
   <script>
-    const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start"], "bases": []}}, "functions": ["start"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile", "register_endpoint", "listen"], "bases": []}}, "functions": ["get_user_profile", "register_endpoint", "listen"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": []}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile", "register_user", "dispatch_event"], "bases": []}}, "functions": ["fetch_profile", "register_user", "dispatch_event"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"]}, "UserModel": {"methods": ["to_dict"], "bases": []}}, "functions": ["to_dict"], "all_functions_count": 1, "internal_dependencies": [], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret", "generate_token"], "all_functions_count": 2, "internal_dependencies": [], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
+    const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start()"], "bases": []}}, "functions": ["start()"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "bases": []}}, "functions": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": []}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "bases": []}}, "functions": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"]}, "UserModel": {"methods": ["to_dict()"], "bases": []}}, "functions": ["to_dict()"], "all_functions_count": 1, "internal_dependencies": [], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret(value)", "generate_token(prefix)"], "all_functions_count": 2, "internal_dependencies": [], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
     const OLLAMA_INFO = {"online": false, "model": "llama3.2:3b"};
     const CYCLES = [];
     const MERMAID_RAW = "graph TD\n  %% RepoGraph Architectural Blueprint\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#164e63,stroke:#22d3ee,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#34d399,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#431407,stroke:#fb923c,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#312e81,stroke:#a78bfa,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"\ud83d\ude80 app.py | \ud83d\udce6 Application\"]:::entryNode\n  end\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | \ud83d\udce6 APIRouter\"]:::apiNode\n  end\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | \ud83d\udce6 AppConfig\"]:::utilNode\n  end\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | \ud83d\udce6 WorkflowEngine\"]:::coreNode\n  end\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | \ud83d\udce6 UserRole, UserModel\"]:::dataNode\n  end\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | \u26a1 hash_secret, generate_token\"]:::utilNode\n  end\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
@@ -791,7 +785,7 @@ graph TD
       securityLevel: 'loose',
       themeVariables: {
         darkMode: true,
-        background: '#090d16',
+        background: '#07090e',
         primaryColor: '#0284c7',
         primaryTextColor: '#f8fafc',
         lineColor: '#38bdf8'
@@ -822,15 +816,60 @@ graph TD
       const nodes = document.querySelectorAll("#graph-viewport svg .node");
       nodes.forEach(node => {
         node.style.cursor = "pointer";
-        node.addEventListener("click", () => {
+        node.addEventListener("click", (e) => {
+          e.stopPropagation();
           const id = node.id.replace(/^flowchart-/, '').split('-')[0];
           for (const [file, data] of Object.entries(SUMMARY)) {
             if (data.id === id || node.id.includes(data.id)) {
               inspectModule(file);
+              highlightNodeConnections(data.id);
               break;
             }
           }
         });
+      });
+
+      // Reset highlights when clicking background
+      const svgEl = document.querySelector("#graph-viewport svg");
+      if (svgEl) {
+        svgEl.addEventListener("click", () => {
+          resetHighlights();
+        });
+      }
+    }
+
+    function highlightNodeConnections(nodeId) {
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+
+      const nodes = svg.querySelectorAll(".node");
+      const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
+
+      nodes.forEach(n => {
+        if (n.id.includes(nodeId)) {
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #38bdf8)";
+        } else {
+          n.style.opacity = "0.3";
+          n.style.filter = "none";
+        }
+      });
+
+      edges.forEach(e => {
+        if (e.id && e.id.includes(nodeId)) {
+          e.style.opacity = "1";
+        } else {
+          e.style.opacity = "0.2";
+        }
+      });
+    }
+
+    function resetHighlights() {
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+      svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {
+        el.style.opacity = "1";
+        el.style.filter = "none";
       });
     }
 
@@ -846,7 +885,10 @@ graph TD
         const item = document.createElement("div");
         item.className = "module-item";
         item.id = `mod-item-${data.id}`;
-        item.onclick = () => inspectModule(file);
+        item.onclick = () => {
+          inspectModule(file);
+          highlightNodeConnections(data.id);
+        };
 
         item.innerHTML = `
           <div class="module-title">
@@ -879,11 +921,7 @@ graph TD
       for (const [file, data] of Object.entries(SUMMARY)) {
         const item = document.getElementById(`mod-item-${data.id}`);
         if (!item) continue;
-        if (layer === "ALL" || data.layer === layer) {
-          item.style.display = "block";
-        } else {
-          item.style.display = "none";
-        }
+        item.style.display = (layer === "ALL" || data.layer === layer) ? "block" : "none";
       }
     }
 
@@ -929,7 +967,7 @@ graph TD
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${f}()</span>`).join("");
+        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${f}</span>`).join("");
       } else {
         document.getElementById("insp-functions-section").style.display = "none";
       }
@@ -937,7 +975,7 @@ graph TD
       const depsContainer = document.getElementById("insp-deps");
       if (data.internal_dependencies.length > 0) {
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${d}')">
+          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${SUMMARY[d]?.id}');">
             <span>↳ ${d}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
@@ -949,7 +987,7 @@ graph TD
       const impByContainer = document.getElementById("insp-imported-by");
       if (data.imported_by && data.imported_by.length > 0) {
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${ib}')">
+          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${SUMMARY[ib]?.id}');">
             <span>↲ ${ib}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
@@ -964,6 +1002,7 @@ graph TD
     function closeInspector() {
       document.getElementById("inspector-drawer").classList.remove("open");
       document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
+      resetHighlights();
     }
 
     function zoomIn() { if (panZoomInstance) panZoomInstance.zoomIn(); }
@@ -977,11 +1016,11 @@ graph TD
       const apiFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("API") || d.layer.includes("Interface")).map(([f]) => f);
 
       document.getElementById("sloth-entry-text").innerText = entryPoints.length 
-        ? `Start execution at: ${entryPoints.join(", ")}. This is where CLI/Server initialization takes place.`
+        ? `Start execution at: ${entryPoints.join(", ")}. This is where initialization takes place.`
         : `No explicit entry point file found. Inspect top-level scripts or root modules.`;
 
       document.getElementById("sloth-core-text").innerText = coreFiles.length 
-        ? `The heart of the application logic is encapsulated in: ${coreFiles.join(", ")}. Look here to understand core domain algorithms.`
+        ? `The heart of domain logic is encapsulated in: ${coreFiles.join(", ")}. Look here to understand core domain algorithms.`
         : `Domain logic is distributed among the internal modules. Inspect dependencies in the center graph.`;
 
       document.getElementById("sloth-api-text").innerText = apiFiles.length
@@ -1020,6 +1059,41 @@ graph TD
       URL.revokeObjectURL(url);
       showToast("📥 ARCHITECTURE.md downloaded!");
     }
+
+    function downloadSVG() {
+      const svg = document.querySelector("#graph-viewport svg");
+      if (!svg) return;
+      const serializer = new XMLSerializer();
+      const source = serializer.serializeToString(svg);
+      const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${REPO_NAME}-architecture.svg`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("🖼️ SVG exported successfully!");
+    }
+
+    // Keyboard shortcuts
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeInspector();
+        closeSlothModal();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        document.getElementById("module-search")?.focus();
+      }
+    });
+
+    // Auto-resize pan-zoom on window resize
+    window.addEventListener("resize", () => {
+      if (panZoomInstance) {
+        panZoomInstance.resize();
+        panZoomInstance.fit();
+        panZoomInstance.center();
+      }
+    });
 
     initSidebar();
   </script>
