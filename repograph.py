@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-RepoGraph - Zero-Read Codebase Architecture Intelligence
-Deterministic AST dependency analysis + Open-Weight Local LLM synthesis.
+RepoGraph - Codebase Architecture & Dependency Graph Explorer
+Deterministic AST dependency analysis + Interactive Web Blueprints.
 Zero third-party pip dependencies required.
 """
 
@@ -12,13 +12,11 @@ import re
 import sys
 import subprocess
 import webbrowser
-import urllib.request
-import urllib.error
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any, Optional
 
-# Ensure UTF-8 output on Windows consoles to prevent cp1252 charmap crashes
+# Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -42,11 +40,7 @@ def sanitize_id(name: str) -> str:
     return cleaned or "node_root"
 
 def resolve_repo_name(target_path: Path) -> str:
-    """
-    Intelligently determine a clean, professional project name.
-    Avoids generic names like 'dev 4', '.', or temp folders.
-    """
-    # 1. Try git remote
+    """Intelligently determine a clean, professional project name."""
     try:
         res = subprocess.run(
             ["git", "config", "--get", "remote.origin.url"],
@@ -59,12 +53,11 @@ def resolve_repo_name(target_path: Path) -> str:
             url = res.stdout.strip()
             name = url.split("/")[-1].replace(".git", "").strip()
             clean_name = re.sub(r'[-_]+$', '', name)
-            if clean_name:
+            if clean_name and clean_name.lower() not in ["dev", "dev 4", "code"]:
                 return clean_name
     except Exception:
         pass
 
-    # 2. Try pyproject.toml or setup.cfg
     for config_file in ["pyproject.toml", "setup.cfg", "package.json"]:
         p = target_path / config_file
         if p.exists():
@@ -77,7 +70,6 @@ def resolve_repo_name(target_path: Path) -> str:
             except Exception:
                 pass
 
-    # 3. Check target directory name
     dir_name = target_path.name
     generic_names = {".", "dev", "dev 4", "src", "app", "code", "repo", "test", "demo"}
     if dir_name.lower() in generic_names or dir_name.isdigit():
@@ -90,11 +82,9 @@ class CodebaseVisitor(ast.NodeVisitor):
     def __init__(self, file_path: Path, repo_root: Path):
         self.file_path = file_path
         self.repo_root = repo_root
-        self.rel_path = file_path.relative_to(repo_root)
         self.classes = []
         self.class_details = {}
         self.functions = []
-        self.function_details = {}
         self.raw_imports = []
         self.docstring = ""
         self.has_main = False
@@ -113,8 +103,7 @@ class CodebaseVisitor(ast.NodeVisitor):
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not item.name.startswith("__"):
                     args_list = [a.arg for a in item.args.args if a.arg != "self"]
-                    args_str = ", ".join(args_list[:3])
-                    methods.append(f"{item.name}({args_str})")
+                    methods.append(f"{item.name}({', '.join(args_list[:3])})")
         
         bases = []
         for b in node.bases:
@@ -133,18 +122,14 @@ class CodebaseVisitor(ast.NodeVisitor):
     def visit_FunctionDef(self, node):
         if not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
-            args_str = ", ".join(args_list[:3])
-            sig = f"{node.name}({args_str})"
-            self.functions.append(sig)
+            self.functions.append(f"{node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node):
         if not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
-            args_str = ", ".join(args_list[:3])
-            sig = f"async {node.name}({args_str})"
-            self.functions.append(sig)
+            self.functions.append(f"async {node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
         self.generic_visit(node)
 
@@ -175,9 +160,7 @@ class CodebaseVisitor(ast.NodeVisitor):
             self.raw_imports.append((mod, alias.name, level))
 
 def classify_layer(rel_path: str, visitor: CodebaseVisitor) -> str:
-    """Classify file into architectural layer based on path conventions and content."""
     lower = rel_path.lower()
-    
     if any(k in lower for k in ["route", "controller", "api", "endpoint", "handler", "view", "server"]):
         return "API & Interface"
     if any(k in lower for k in ["model", "schema", "entity", "dto", "database", "db", "repository", "crud"]):
@@ -190,7 +173,6 @@ def classify_layer(rel_path: str, visitor: CodebaseVisitor) -> str:
         return "Configuration"
     if visitor.has_main or any(k in lower for k in ["main", "app", "cli", "run", "entry"]):
         return "Application Entry"
-    
     return "Domain Services"
 
 def count_file_lines(path: Path) -> int:
@@ -201,7 +183,6 @@ def count_file_lines(path: Path) -> int:
         return 0
 
 def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
-    """Detect circular dependency cycles in module graph."""
     cycles = []
     visited = set()
     rec_stack = set()
@@ -243,12 +224,9 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
             if file.endswith(".py"):
                 py_files.append(Path(root) / file)
 
-    # 1. Build comprehensive module mapping (including packages and __init__.py)
     for p in py_files:
         rel = p.relative_to(repo_path)
         rel_posix = rel.as_posix()
-        
-        # mod name from relative path
         rel_no_ext = rel.with_suffix("")
         mod_name = rel_no_ext.as_posix().replace("/", ".")
         short_name = mod_name.split(".")[-1]
@@ -256,7 +234,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
         module_to_file[mod_name] = rel_posix
         module_to_file[short_name] = rel_posix
 
-        # Special handling for package __init__.py
         if p.name == "__init__.py":
             pkg_path = p.parent.relative_to(repo_path)
             pkg_mod = pkg_path.as_posix().replace("/", ".")
@@ -264,7 +241,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
                 module_to_file[pkg_mod] = rel_posix
                 module_to_file[pkg_mod.split(".")[-1]] = rel_posix
 
-    # 2. Parse AST for each file
     visitors: Dict[str, CodebaseVisitor] = {}
     for p in py_files:
         rel_posix = p.relative_to(repo_path).as_posix()
@@ -297,7 +273,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
         except Exception:
             continue
 
-    # 3. Resolve internal dependencies with relative import support
     for p in py_files:
         rel_posix = p.relative_to(repo_path).as_posix()
         if rel_posix not in codebase_summary:
@@ -311,7 +286,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
         file_parent = p.parent.relative_to(repo_path)
 
         for mod_name, item_name, level in visitor.raw_imports:
-            # Handle relative imports (from . import x, from ..foo import bar)
             if level > 0:
                 curr_dir = file_parent
                 for _ in range(level - 1):
@@ -333,7 +307,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
                     if cand in module_to_file and module_to_file[cand] != rel_posix:
                         internal_deps.add(module_to_file[cand])
             else:
-                # Absolute imports
                 candidates = []
                 if mod_name:
                     candidates.append(mod_name)
@@ -349,7 +322,6 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
 
         codebase_summary[rel_posix]["internal_dependencies"] = sorted(list(internal_deps))
 
-    # 4. Compute reverse dependencies (imported_by)
     for file, data in codebase_summary.items():
         for dep in data["internal_dependencies"]:
             if dep in codebase_summary and file not in codebase_summary[dep]["imported_by"]:
@@ -357,70 +329,15 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
 
     return codebase_summary
 
-def get_installed_ollama_model() -> Tuple[str, bool]:
-    """Auto-detect whatever model the user has installed."""
-    url = "http://localhost:11434/api/tags"
-    preferred = [
-        "llama3.2:3b", "llama3.2:latest", "llama3.2", "qwen2.5-coder", 
-        "qwen2.5-coder:7b", "gemma2", "gemma2:2b", "llama3", "mistral",
-        "deepseek-coder", "phi3"
-    ]
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=2.5) as res:
-            data = json.loads(res.read().decode("utf-8"))
-            models = [m["name"] for m in data.get("models", [])]
-            for pref in preferred:
-                for m in models:
-                    if pref in m:
-                        return m, True
-            if models:
-                return models[0], True
-    except Exception:
-        pass
-    return "llama3.2:3b", False
-
-def query_ollama(prompt: str, model: str) -> Optional[str]:
-    url = "http://localhost:11434/api/generate"
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.1, "num_ctx": 4096}
-    }).encode("utf-8")
-
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=35) as response:
-            res = json.loads(response.read().decode("utf-8"))
-            return res.get("response", "").strip()
-    except Exception:
-        return None
-
-def clean_mermaid_output(text: str) -> str:
-    """Strips markdown blocks and extracts pure mermaid code."""
-    text = re.sub(r'```(?:mermaid)?', '', text).replace('```', '').strip()
-    match = re.search(r'(graph\s+[A-Z]{2}[\s\S]*)', text)
-    if match:
-        clean = match.group(1).strip()
-        if "-->" in clean or "---" in clean or "[" in clean:
-            return clean
-    return ""
-
 def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "TD") -> str:
-    """
-    100% reliable fallback generator that never fails syntax parsing.
-    Groups nodes into architectural subgraphs with tailored theme colors.
-    """
     lines = [
         f"graph {direction}",
-        "  %% RepoGraph Architectural Blueprint",
         "  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;",
-        "  classDef apiNode fill:#164e63,stroke:#22d3ee,stroke-width:1.5px,color:#f8fafc;",
-        "  classDef coreNode fill:#064e3b,stroke:#34d399,stroke-width:1.5px,color:#f8fafc;",
-        "  classDef dataNode fill:#431407,stroke:#fb923c,stroke-width:1.5px,color:#f8fafc;",
-        "  classDef utilNode fill:#312e81,stroke:#a78bfa,stroke-width:1.5px,color:#f8fafc;",
-        "  classDef defaultNode fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;"
+        "  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;"
     ]
 
     layers: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
@@ -445,19 +362,19 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
             node_id = data["id"]
             label_parts = [file]
             if data["classes"]:
-                label_parts.append(f"📦 {', '.join(data['classes'][:2])}")
+                label_parts.append(f"{', '.join(data['classes'][:2])}")
             elif data["functions"]:
                 clean_funcs = [f.split('(')[0] for f in data["functions"][:2]]
-                label_parts.append(f"⚡ {', '.join(clean_funcs)}")
+                label_parts.append(f"{', '.join(clean_funcs)}")
             
             clean_label = " | ".join(label_parts).replace('"', "'")
             style_class = layer_styles.get(layer_name, "defaultNode")
             if data.get("has_entry_point"):
                 style_class = "entryNode"
-                clean_label = f"🚀 {clean_label}"
 
             lines.append(f'    {node_id}["{clean_label}"]:::{style_class}')
         lines.append("  end")
+        lines.append(f'  style {subgraph_id} fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8')
 
     edges_added = set()
     for file, data in summary.items():
@@ -472,9 +389,8 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
 
     return "\n".join(lines)
 
-def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any], ollama_info: Dict[str, Any]) -> str:
+def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary: Dict[str, Any]) -> str:
     summary_json = json.dumps(summary, indent=None)
-    ollama_json = json.dumps(ollama_info, indent=None)
     cycles = detect_circular_dependencies(summary)
     cycles_json = json.dumps(cycles)
     
@@ -484,20 +400,16 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     total_loc = sum(d["loc"] for d in summary.values())
     total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
 
-    model_label = f"AI: {ollama_info.get('model', 'Local')}" if ollama_info.get("online") else "Engine: Deterministic AST"
-    dot_class = "" if ollama_info.get("online") else "warning"
-
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RepoGraph - {repo_name} | Architecture Intelligence</title>
+  <title>RepoGraph - {repo_name} | Codebase Architecture Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
   <style>
     :root {{
       --bg-base: #06080e;
@@ -509,11 +421,11 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       --text-muted: #94a3b8;
       --text-faint: #475569;
       --accent: #38bdf8;
-      --accent-glow: rgba(56, 189, 248, 0.28);
-      --emerald: #34d399;
-      --amber: #fbbf24;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.25);
+      --amber: #f59e0b;
       --indigo: #818cf8;
-      --rose: #fb7185;
       --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }}
@@ -522,11 +434,6 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
 
     body {{
       background-color: var(--bg-base);
-      background-image: 
-        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
-        radial-gradient(circle at 85% 85%, rgba(129, 140, 248, 0.06) 0%, transparent 45%),
-        radial-gradient(#1e293b 1px, transparent 1px);
-      background-size: 100% 100%, 100% 100%, 30px 30px;
       color: var(--text-main);
       font-family: var(--font-ui);
       height: 100vh;
@@ -536,15 +443,14 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     header.top-nav {{
-      height: 64px;
-      background: rgba(12, 17, 29, 0.85);
+      height: 56px;
+      background: rgba(12, 17, 29, 0.95);
       backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
+      padding: 0 18px;
       z-index: 50;
       flex-shrink: 0;
     }}
@@ -556,44 +462,46 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     .logo-badge {{
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      background: linear-gradient(135deg, #0284c7, #6366f1);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0284c7, #2563eb);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
-      box-shadow: 0 0 20px var(--accent-glow);
+      font-weight: 800;
+      font-size: 14px;
+      color: #ffffff;
+      box-shadow: 0 0 14px var(--accent-glow);
     }}
 
     .title-group h1 {{
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: -0.3px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
       display: flex;
       align-items: center;
       gap: 8px;
     }}
 
     .title-group p {{
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
     }}
 
     .nav-actions {{
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }}
 
     .status-pill {{
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 12px;
+      padding: 4px 10px;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       font-family: var(--font-mono);
       background: rgba(15, 23, 42, 0.8);
@@ -601,32 +509,27 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     .status-dot {{
-      width: 7px;
-      height: 7px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--emerald);
       box-shadow: 0 0 8px var(--emerald);
-    }}
-
-    .status-dot.warning {{
-      background: var(--amber);
-      box-shadow: 0 0 8px var(--amber);
     }}
 
     .btn {{
       background: var(--bg-surface-elevated);
       color: var(--text-main);
       border: 1px solid var(--border);
-      padding: 7px 14px;
-      border-radius: 8px;
+      padding: 5px 12px;
+      border-radius: 6px;
       font-family: var(--font-ui);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.18s ease;
+      transition: all 0.15s ease;
       text-decoration: none;
     }}
 
@@ -634,7 +537,6 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       background: #1e293b;
       border-color: var(--accent);
       color: #ffffff;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
     }}
 
     .btn-primary {{
@@ -646,7 +548,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
 
     .btn-primary:hover {{
       background: linear-gradient(135deg, #0369a1, #1d4ed8);
-      box-shadow: 0 0 16px var(--accent-glow);
+      box-shadow: 0 0 14px var(--accent-glow);
     }}
 
     .workspace {{
@@ -657,8 +559,8 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     aside.sidebar {{
-      width: 320px;
-      background: rgba(12, 17, 29, 0.85);
+      width: 310px;
+      background: rgba(12, 17, 29, 0.9);
       backdrop-filter: blur(12px);
       border-right: 1px solid var(--border);
       display: flex;
@@ -668,11 +570,8 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     .sidebar-header {{
-      padding: 14px 16px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
     }}
 
     .search-box {{
@@ -685,9 +584,9 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       background: #090d16;
       border: 1px solid var(--border);
       color: var(--text-main);
-      padding: 8px 12px 8px 32px;
-      border-radius: 8px;
-      font-size: 13px;
+      padding: 7px 10px 7px 30px;
+      border-radius: 6px;
+      font-size: 12px;
       font-family: var(--font-ui);
       outline: none;
       transition: border-color 0.2s;
@@ -700,56 +599,57 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
 
     .search-box .search-icon {{
       position: absolute;
-      left: 10px;
+      left: 9px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
-      font-size: 13px;
+      font-size: 12px;
     }}
 
     .metrics-grid {{
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-      padding: 12px 16px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px 14px;
       background: rgba(9, 13, 22, 0.6);
       border-bottom: 1px solid var(--border);
     }}
 
     .metric-card {{
       background: var(--bg-surface-elevated);
-      padding: 8px 12px;
+      padding: 6px 8px;
       border-radius: 6px;
       border: 1px solid rgba(255, 255, 255, 0.04);
+      text-align: center;
     }}
 
     .metric-card .label {{
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.3px;
     }}
 
     .metric-card .value {{
-      font-size: 18px;
+      font-size: 15px;
       font-weight: 700;
       color: #ffffff;
       font-family: var(--font-mono);
-      margin-top: 2px;
+      margin-top: 1px;
     }}
 
     .layer-filters {{
-      padding: 10px 16px 6px;
+      padding: 8px 14px 6px;
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
       border-bottom: 1px solid var(--border);
     }}
 
     .layer-chip {{
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 500;
-      padding: 3px 8px;
+      padding: 2px 7px;
       border-radius: 12px;
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
@@ -767,15 +667,15 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     .module-list {{
       flex: 1;
       overflow-y: auto;
-      padding: 10px 12px;
+      padding: 8px 10px;
     }}
 
     .module-item {{
-      padding: 9px 12px;
-      margin-bottom: 6px;
+      padding: 8px 10px;
+      margin-bottom: 5px;
       background: var(--bg-surface-elevated);
       border: 1px solid transparent;
-      border-radius: 7px;
+      border-radius: 6px;
       cursor: pointer;
       transition: all 0.15s ease;
     }}
@@ -787,7 +687,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     .module-title {{
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       color: #f8fafc;
       display: flex;
@@ -799,59 +699,87 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     .module-sub {{
       font-size: 11px;
       color: var(--text-muted);
-      margin-top: 3px;
+      margin-top: 2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }}
 
     .tag-badge {{
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 600;
-      padding: 2px 6px;
+      padding: 1px 5px;
       border-radius: 4px;
       background: rgba(56, 189, 248, 0.1);
       color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.2);
     }}
 
+    /* Viewport & Native Absolute Transform Pan/Zoom Canvas */
     main.viewport {{
       flex: 1;
       position: relative;
-      background: #07090e;
+      background-color: #06080e;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(129, 140, 248, 0.04) 0%, transparent 40%),
+        radial-gradient(#1e293b 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 28px 28px;
       overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
     }}
 
-    #graph-container {{
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+    main.viewport.is-dragging {{
+      cursor: grabbing;
     }}
 
+    #pan-layer {{
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+      pointer-events: auto;
+    }}
+
+    #pan-layer svg {{
+      display: block;
+      overflow: visible;
+      filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
+    }}
+
+    /* Floating Viewport Controls */
     .viewport-controls {{
       position: absolute;
-      top: 16px;
-      right: 16px;
+      top: 14px;
+      right: 14px;
       display: flex;
-      gap: 6px;
-      background: rgba(12, 17, 29, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 6px;
-      border-radius: 10px;
+      align-items: center;
+      gap: 5px;
+      background: rgba(12, 17, 29, 0.92);
+      backdrop-filter: blur(12px);
+      padding: 4px;
+      border-radius: 8px;
       border: 1px solid var(--border);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
       z-index: 30;
     }}
 
+    .zoom-badge {{
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 0 6px;
+      min-width: 44px;
+      text-align: center;
+    }}
+
     .control-btn {{
-      width: 34px;
-      height: 34px;
-      border-radius: 6px;
+      width: 30px;
+      height: 30px;
+      border-radius: 5px;
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
       color: var(--text-main);
@@ -859,7 +787,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      font-size: 15px;
+      font-size: 13px;
       transition: all 0.15s ease;
     }}
 
@@ -871,22 +799,23 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
 
     .hint-chip {{
       position: absolute;
-      bottom: 16px;
-      left: 16px;
+      bottom: 14px;
+      left: 14px;
       background: rgba(12, 17, 29, 0.85);
       backdrop-filter: blur(8px);
-      padding: 6px 14px;
+      padding: 5px 12px;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
       border: 1px solid var(--border);
       pointer-events: none;
       z-index: 30;
     }}
 
+    /* Inspector Drawer */
     aside.inspector {{
-      width: 360px;
-      background: rgba(12, 17, 29, 0.95);
+      width: 340px;
+      background: rgba(12, 17, 29, 0.96);
       backdrop-filter: blur(16px);
       border-left: 1px solid var(--border);
       display: flex;
@@ -906,7 +835,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     .inspector-header {{
-      padding: 16px 20px;
+      padding: 14px 18px;
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
@@ -916,29 +845,29 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     .inspector-body {{
       flex: 1;
       overflow-y: auto;
-      padding: 20px;
+      padding: 16px 18px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 16px;
     }}
 
     .section-title {{
-      font-size: 11px;
+      font-size: 10.5px;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.6px;
       color: var(--text-muted);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-weight: 600;
     }}
 
     .symbol-pill {{
       display: inline-block;
-      padding: 4px 8px;
-      margin: 2px 4px 4px 0;
-      border-radius: 5px;
+      padding: 3px 7px;
+      margin: 2px 3px 3px 0;
+      border-radius: 4px;
       background: #1e293b;
       border: 1px solid rgba(255, 255, 255, 0.08);
-      font-size: 12px;
+      font-size: 11px;
       font-family: var(--font-mono);
       color: #38bdf8;
     }}
@@ -947,15 +876,16 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 10px;
+      padding: 6px 9px;
       background: #090d16;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 12px;
-      margin-bottom: 5px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      margin-bottom: 4px;
       cursor: pointer;
       text-decoration: none;
       color: var(--text-main);
+      transition: all 0.15s ease;
     }}
 
     .dep-link:hover {{
@@ -963,6 +893,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       background: #131b2e;
     }}
 
+    /* Architecture Overview Modal */
     .modal-overlay {{
       display: none;
       position: fixed;
@@ -982,53 +913,50 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     .modal-dialog {{
       background: var(--bg-surface);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      max-width: 680px;
+      border-radius: 12px;
+      max-width: 620px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-      padding: 24px;
+      padding: 20px;
       position: relative;
     }}
 
     .modal-dialog h3 {{
-      font-size: 20px;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      font-size: 17px;
+      margin-bottom: 4px;
     }}
 
     .guide-step {{
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 16px;
-      margin-top: 12px;
+      border-radius: 7px;
+      padding: 12px 14px;
+      margin-top: 10px;
     }}
 
     .guide-step h4 {{
-      font-size: 14px;
+      font-size: 13px;
       color: var(--accent);
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }}
 
     .guide-step p {{
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-muted);
-      line-height: 1.5;
+      line-height: 1.45;
     }}
 
     #toast {{
       position: fixed;
-      bottom: 24px;
-      right: 24px;
+      bottom: 20px;
+      right: 20px;
       background: #0284c7;
       color: #ffffff;
-      padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
       font-weight: 500;
       box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
       transform: translateY(100px);
@@ -1041,42 +969,39 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       transform: translateY(0);
       opacity: 1;
     }}
-
-    svg {{ cursor: grab; }}
-    svg:active {{ cursor: grabbing; }}
   </style>
 </head>
 <body>
 
   <header class="top-nav">
     <div class="brand-group">
-      <div class="logo-badge">⚡</div>
+      <div class="logo-badge">RG</div>
       <div class="title-group">
-        <h1>RepoGraph: {repo_name}</h1>
-        <p>Zero-Read Architecture Intelligence & Interactive Blueprint</p>
+        <h1>{repo_name}</h1>
+        <p>Codebase Architecture & Dependency Graph Explorer</p>
       </div>
     </div>
 
     <div class="nav-actions">
       <div class="status-pill">
-        <span class="status-dot {dot_class}"></span>
-        <span>{model_label}</span>
+        <span class="status-dot"></span>
+        <span>Deterministic AST Engine</span>
       </div>
       
-      <button class="btn" onclick="openSlothModal()">
-        <span>🦥 30s Guide</span>
+      <button class="btn" onclick="openOverviewModal()">
+        <span>Overview</span>
       </button>
 
       <button class="btn" onclick="copyMermaid()">
-        <span>📋 Copy Mermaid</span>
+        <span>Copy Mermaid</span>
       </button>
 
       <button class="btn" onclick="downloadSVG()">
-        <span>🖼️ Export SVG</span>
+        <span>Export SVG</span>
       </button>
 
       <button class="btn btn-primary" onclick="downloadMarkdown()">
-        <span>⬇ Export ARCHITECTURE.md</span>
+        <span>Download ARCHITECTURE.md</span>
       </button>
     </div>
   </header>
@@ -1092,7 +1017,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
 
       <div class="metrics-grid">
         <div class="metric-card">
-          <div class="label">Modules</div>
+          <div class="label">Files</div>
           <div class="value">{total_files}</div>
         </div>
         <div class="metric-card">
@@ -1100,11 +1025,11 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
           <div class="value">{total_classes}</div>
         </div>
         <div class="metric-card">
-          <div class="label">Functions</div>
+          <div class="label">Funcs</div>
           <div class="value">{total_functions}</div>
         </div>
         <div class="metric-card">
-          <div class="label">Dep Edges</div>
+          <div class="label">Edges</div>
           <div class="value">{total_deps}</div>
         </div>
       </div>
@@ -1121,18 +1046,18 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       <div class="viewport-controls">
         <button class="control-btn" title="Zoom In (+)" onclick="zoomIn()">+</button>
         <button class="control-btn" title="Zoom Out (-)" onclick="zoomOut()">−</button>
-        <button class="control-btn" title="Reset View (0)" onclick="resetZoom()">🎯</button>
-        <button class="control-btn" title="Fit Diagram" onclick="fitDiagram()">⛶</button>
+        <span class="zoom-badge" id="zoom-level">100%</span>
+        <button class="control-btn" title="Fit to Screen" onclick="fitToScreen(true)">⛶</button>
+        <button class="control-btn" title="Reset View" onclick="resetZoom()">🎯</button>
+        <button class="control-btn" title="Toggle Orientation (Top-Down / Left-Right)" onclick="toggleLayout()">⇄</button>
       </div>
 
-      <div id="graph-container">
-        <div class="mermaid" id="mermaid-render-target">
-{mermaid_code}
-        </div>
+      <div id="pan-layer">
+        <!-- Rendered SVG Injected Here -->
       </div>
 
       <div class="hint-chip">
-        💡 Drag to Pan &bull; Scroll to Zoom &bull; Click Node for Deep Inspection
+        Drag to Pan &bull; Scroll to Zoom &bull; Click Node to Inspect &bull; ⇄ to Switch Orientation
       </div>
     </main>
 
@@ -1140,7 +1065,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       <div class="inspector-header">
         <div>
           <span class="tag-badge" id="insp-layer">Core</span>
-          <h2 style="font-size: 16px; margin-top: 4px;" id="insp-file">module.py</h2>
+          <h2 style="font-size: 14px; margin-top: 3px;" id="insp-file">module.py</h2>
         </div>
         <button class="control-btn" onclick="closeInspector()">✕</button>
       </div>
@@ -1148,7 +1073,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       <div class="inspector-body">
         <div>
           <div class="section-title">Module Summary</div>
-          <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4;" id="insp-doc"></p>
+          <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.4;" id="insp-doc"></p>
         </div>
 
         <div>
@@ -1188,96 +1113,288 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     </aside>
   </div>
 
-  <div class="modal-overlay" id="sloth-modal" onclick="closeSlothModalOnOut(event)">
+  <div class="modal-overlay" id="overview-modal" onclick="closeOverviewModalOnOut(event)">
     <div class="modal-dialog">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>🦥 30-Second Lazy Onboarding Guide</h3>
-        <button class="control-btn" onclick="closeSlothModal()">✕</button>
+        <h3>Architecture Overview</h3>
+        <button class="control-btn" onclick="closeOverviewModal()">✕</button>
       </div>
-      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-        Everything you need to know about <strong>{repo_name}</strong> without reading any code.
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
+        Architectural layers and execution boundaries in <strong>{repo_name}</strong>.
       </p>
 
       <div class="guide-step">
-        <h4>🚀 1. Where Does Execution Begin?</h4>
-        <p id="sloth-entry-text">Analyzing entry points...</p>
+        <h4>1. Application Entry Points</h4>
+        <p id="overview-entry-text">Analyzing entry points...</p>
       </div>
 
       <div class="guide-step">
-        <h4>🧠 2. Core Business Engine</h4>
-        <p id="sloth-core-text">Analyzing domain layers...</p>
+        <h4>2. Core Business Engine</h4>
+        <p id="overview-core-text">Analyzing domain layers...</p>
       </div>
 
       <div class="guide-step">
-        <h4>🌐 3. Data & API Boundaries</h4>
-        <p id="sloth-api-text">Analyzing interfaces...</p>
+        <h4>3. Interfaces & Storage</h4>
+        <p id="overview-api-text">Analyzing interfaces...</p>
       </div>
 
-      <div class="guide-step">
-        <h4>🛠️ 4. How to Extend This Codebase</h4>
-        <p>Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
-      </div>
-
-      <div style="margin-top: 18px; text-align: right;">
-        <button class="btn btn-primary" onclick="closeSlothModal()">Got it, back to the Blueprint</button>
+      <div style="margin-top: 16px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeOverviewModal()">Back to Blueprint</button>
       </div>
     </div>
   </div>
 
-  <div id="toast">Mermaid markdown copied to clipboard!</div>
+  <div id="toast">Mermaid diagram copied to clipboard!</div>
 
   <script>
     const SUMMARY = {summary_json};
-    const OLLAMA_INFO = {ollama_json};
     const CYCLES = {cycles_json};
-    const MERMAID_RAW = {json.dumps(mermaid_code)};
+    const MERMAID_TD = {json.dumps(mermaid_td)};
+    const MERMAID_LR = {json.dumps(mermaid_lr)};
     const REPO_NAME = "{repo_name}";
 
-    let panZoomInstance = null;
+    let currentDirection = "TD";
     let selectedModule = null;
 
+    // --- BULLETPROOF NATIVE PAN & ZOOM ENGINE ---
+    const viewport = document.getElementById("graph-viewport");
+    const panLayer = document.getElementById("pan-layer");
+
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    function updateTransform(smooth = false) {{
+      if (smooth) {{
+        panLayer.style.transition = "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+      }} else {{
+        panLayer.style.transition = "none";
+      }}
+      panLayer.style.transform = `translate(${{translateX}}px, ${{translateY}}px) scale(${{scale}})`;
+      
+      const zoomIndicator = document.getElementById("zoom-level");
+      if (zoomIndicator) {{
+        zoomIndicator.innerText = Math.round(scale * 100) + "%";
+      }}
+    }}
+
+    viewport.addEventListener("mousedown", (e) => {{
+      if (e.button !== 0 || e.target.closest(".viewport-controls") || e.target.closest(".hint-chip")) return;
+      isDragging = true;
+      startX = e.clientX - translateX;
+      startY = e.clientY - translateY;
+      viewport.classList.add("is-dragging");
+    }});
+
+    window.addEventListener("mousemove", (e) => {{
+      if (!isDragging) return;
+      translateX = e.clientX - startX;
+      translateY = e.clientY - startY;
+      updateTransform(false);
+    }});
+
+    window.addEventListener("mouseup", () => {{
+      if (isDragging) {{
+        isDragging = false;
+        viewport.classList.remove("is-dragging");
+      }}
+    }});
+
+    viewport.addEventListener("wheel", (e) => {{
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY < 0 ? 1.14 : 0.88;
+      const newScale = Math.min(Math.max(scale * zoomFactor, 0.15), 6.0);
+
+      translateX = mouseX - (mouseX - translateX) * (newScale / scale);
+      translateY = mouseY - (mouseY - translateY) * (newScale / scale);
+      scale = newScale;
+
+      updateTransform(false);
+    }}, {{ passive: false }});
+
+    // Touch events for mobile & tablets
+    let initialTouchDist = 0;
+    let initialTouchScale = 1;
+
+    viewport.addEventListener("touchstart", (e) => {{
+      if (e.touches.length === 1) {{
+        isDragging = true;
+        startX = e.touches[0].clientX - translateX;
+        startY = e.touches[0].clientY - translateY;
+        viewport.classList.add("is-dragging");
+      }} else if (e.touches.length === 2) {{
+        isDragging = false;
+        initialTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialTouchScale = scale;
+      }}
+    }}, {{ passive: true }});
+
+    viewport.addEventListener("touchmove", (e) => {{
+      if (e.touches.length === 1 && isDragging) {{
+        translateX = e.touches[0].clientX - startX;
+        translateY = e.touches[0].clientY - startY;
+        updateTransform(false);
+      }} else if (e.touches.length === 2 && initialTouchDist > 0) {{
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const rect = viewport.getBoundingClientRect();
+        const touchX = midX - rect.left;
+        const touchY = midY - rect.top;
+
+        const factor = dist / initialTouchDist;
+        const newScale = Math.min(Math.max(initialTouchScale * factor, 0.15), 6.0);
+
+        translateX = touchX - (touchX - translateX) * (newScale / scale);
+        translateY = touchY - (touchY - translateY) * (newScale / scale);
+        scale = newScale;
+        updateTransform(false);
+      }}
+    }}, {{ passive: true }});
+
+    viewport.addEventListener("touchend", () => {{
+      isDragging = false;
+      initialTouchDist = 0;
+      viewport.classList.remove("is-dragging");
+    }});
+
+    function zoomIn() {{
+      zoomAtCenter(1.25);
+    }}
+
+    function zoomOut() {{
+      zoomAtCenter(0.8);
+    }}
+
+    function zoomAtCenter(factor) {{
+      const cx = viewport.clientWidth / 2;
+      const cy = viewport.clientHeight / 2;
+      const newScale = Math.min(Math.max(scale * factor, 0.15), 6.0);
+      translateX = cx - (cx - translateX) * (newScale / scale);
+      translateY = cy - (cy - translateY) * (newScale / scale);
+      scale = newScale;
+      updateTransform(true);
+    }}
+
+    function resetZoom() {{
+      fitToScreen(true);
+    }}
+
+    function fitToScreen(smooth = true) {{
+      const svgEl = panLayer.querySelector("svg");
+      if (!svgEl) return;
+      
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
+      if (vpW <= 0 || vpH <= 0) return;
+
+      let svgW = 800;
+      let svgH = 600;
+
+      if (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width > 0) {{
+        svgW = svgEl.viewBox.baseVal.width;
+        svgH = svgEl.viewBox.baseVal.height;
+      }} else {{
+        try {{
+          const bbox = svgEl.getBBox();
+          if (bbox.width > 0) {{
+            svgW = bbox.width;
+            svgH = bbox.height;
+          }}
+        }} catch(e) {{}}
+      }}
+
+      // Standardize size
+      svgEl.style.width = svgW + "px";
+      svgEl.style.height = svgH + "px";
+      svgEl.style.maxWidth = "none";
+      svgEl.style.display = "block";
+
+      const pad = 60;
+      const availW = Math.max(vpW - pad * 2, 100);
+      const availH = Math.max(vpH - pad * 2, 100);
+
+      const scaleX = availW / svgW;
+      const scaleY = availH / svgH;
+      scale = Math.min(scaleX, scaleY);
+      scale = Math.min(Math.max(scale, 0.25), 1.25);
+
+      translateX = (vpW - svgW * scale) / 2;
+      translateY = (vpH - svgH * scale) / 2;
+
+      updateTransform(smooth);
+    }}
+
+    function toggleLayout() {{
+      currentDirection = currentDirection === "TD" ? "LR" : "TD";
+      renderMermaidDiagram();
+      showToast("Switched to " + (currentDirection === "TD" ? "Top-Down" : "Left-to-Right") + " view");
+    }}
+
+    // --- MERMAID RENDERING & INTERACTION ---
     mermaid.initialize({{
-      startOnLoad: true,
+      startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
       themeVariables: {{
         darkMode: true,
-        background: '#07090e',
+        background: '#06080e',
         primaryColor: '#0284c7',
         primaryTextColor: '#f8fafc',
         lineColor: '#38bdf8'
       }}
     }});
 
-    const observer = new MutationObserver((mutations, obs) => {{
-      const svg = document.querySelector("#graph-viewport svg");
-      if (svg) {{
-        svg.setAttribute("style", "width: 100%; height: 100%;");
-        panZoomInstance = svgPanZoom(svg, {{
-          zoomEnabled: true,
-          controlIconsEnabled: false,
-          fit: true,
-          center: true,
-          minZoom: 0.2,
-          maxZoom: 12,
-          zoomScaleSensitivity: 0.3
-        }});
+    async function renderMermaidDiagram() {{
+      panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Rendering architecture graph...</div>';
+      try {{
+        const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
+        const uniqueId = "mermaid_svg_" + Date.now();
+        const {{ svg }} = await mermaid.render(uniqueId, rawCode);
+        panLayer.innerHTML = svg;
 
-        attachSvgNodeListeners();
-        obs.disconnect();
+        const svgEl = panLayer.querySelector("svg");
+        if (svgEl) {{
+          svgEl.style.maxWidth = "none";
+          svgEl.style.display = "block";
+          svgEl.removeAttribute("height");
+
+          attachSvgNodeListeners();
+          requestAnimationFrame(() => {{
+            fitToScreen(false);
+          }});
+        }}
+      }} catch (err) {{
+        console.error("Mermaid error:", err);
+        panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Error rendering diagram.</div>';
       }}
-    }});
-    observer.observe(document.getElementById("graph-container"), {{ childList: true, subtree: true }});
+    }}
 
     function attachSvgNodeListeners() {{
-      const nodes = document.querySelectorAll("#graph-viewport svg .node");
+      const svg = panLayer.querySelector("svg");
+      if (!svg) return;
+
+      const nodes = svg.querySelectorAll(".node");
       nodes.forEach(node => {{
         node.style.cursor = "pointer";
         node.addEventListener("click", (e) => {{
           e.stopPropagation();
-          const id = node.id.replace(/^flowchart-/, '').split('-')[0];
+          const cleanId = node.id.replace(/^flowchart-/, "").replace(/-[0-9]+$/, "");
           for (const [file, data] of Object.entries(SUMMARY)) {{
-            if (data.id === id || node.id.includes(data.id)) {{
+            if (data.id === cleanId || node.id.includes(data.id)) {{
               inspectModule(file);
               highlightNodeConnections(data.id);
               break;
@@ -1286,17 +1403,15 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
         }});
       }});
 
-      // Reset highlights when clicking background
-      const svgEl = document.querySelector("#graph-viewport svg");
-      if (svgEl) {{
-        svgEl.addEventListener("click", () => {{
+      viewport.addEventListener("click", (e) => {{
+        if (!e.target.closest(".node") && !e.target.closest("#inspector-drawer") && !e.target.closest(".module-item")) {{
           resetHighlights();
-        }});
-      }}
+        }}
+      }});
     }}
 
     function highlightNodeConnections(nodeId) {{
-      const svg = document.querySelector("#graph-viewport svg");
+      const svg = panLayer.querySelector("svg");
       if (!svg) return;
 
       const nodes = svg.querySelectorAll(".node");
@@ -1307,7 +1422,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
           n.style.opacity = "1";
           n.style.filter = "drop-shadow(0 0 10px #38bdf8)";
         }} else {{
-          n.style.opacity = "0.3";
+          n.style.opacity = "0.22";
           n.style.filter = "none";
         }}
       }});
@@ -1316,13 +1431,13 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
         if (e.id && e.id.includes(nodeId)) {{
           e.style.opacity = "1";
         }} else {{
-          e.style.opacity = "0.2";
+          e.style.opacity = "0.12";
         }}
       }});
     }}
 
     function resetHighlights() {{
-      const svg = document.querySelector("#graph-viewport svg");
+      const svg = panLayer.querySelector("svg");
       if (!svg) return;
       svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {{
         el.style.opacity = "1";
@@ -1353,7 +1468,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
             <span class="tag-badge">${{data.layer.split(' ')[0]}}</span>
           </div>
           <div class="module-sub">
-            ${{data.classes.length ? '📦 ' + data.classes.join(', ') : '⚡ ' + (data.functions.slice(0,3).join(', ') || 'module')}}
+            ${{data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module')}}
           </div>
         `;
         list.appendChild(item);
@@ -1367,7 +1482,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
         filterContainer.appendChild(chip);
       }});
 
-      populateSlothModal();
+      populateOverviewModal();
     }}
 
     function filterByLayer(layer) {{
@@ -1416,7 +1531,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       const clsContainer = document.getElementById("insp-classes");
       if (data.classes.length > 0) {{
         document.getElementById("insp-classes-section").style.display = "block";
-        clsContainer.innerHTML = data.classes.map(c => `<span class="symbol-pill">class ${{c}}</span>`).join("");
+        clsContainer.innerHTML = data.classes.map(c => `<span class="symbol-pill">${{c}}</span>`).join("");
       }} else {{
         document.getElementById("insp-classes-section").style.display = "none";
       }}
@@ -1424,7 +1539,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {{
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${{f}}</span>`).join("");
+        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${{f}}</span>`).join("");
       }} else {{
         document.getElementById("insp-functions-section").style.display = "none";
       }}
@@ -1438,7 +1553,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
           </div>
         `).join("");
       }} else {{
-        depsContainer.innerHTML = `<span style="font-size:12px; color:var(--text-faint);">No internal dependencies (Standalone)</span>`;
+        depsContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Standalone (No internal dependencies)</span>`;
       }}
 
       const impByContainer = document.getElementById("insp-imported-by");
@@ -1450,7 +1565,7 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
           </div>
         `).join("");
       }} else {{
-        impByContainer.innerHTML = `<span style="font-size:12px; color:var(--text-faint);">Not imported by internal files</span>`;
+        impByContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Not imported by internal modules</span>`;
       }}
 
       document.getElementById("inspector-drawer").classList.add("open");
@@ -1462,32 +1577,27 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       resetHighlights();
     }}
 
-    function zoomIn() {{ if (panZoomInstance) panZoomInstance.zoomIn(); }}
-    function zoomOut() {{ if (panZoomInstance) panZoomInstance.zoomOut(); }}
-    function resetZoom() {{ if (panZoomInstance) {{ panZoomInstance.reset(); panZoomInstance.center(); }} }}
-    function fitDiagram() {{ if (panZoomInstance) {{ panZoomInstance.fit(); panZoomInstance.center(); }} }}
-
-    function populateSlothModal() {{
+    function populateOverviewModal() {{
       const entryPoints = Object.entries(SUMMARY).filter(([_, d]) => d.has_entry_point).map(([f]) => f);
       const coreFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("Core") || d.layer.includes("Domain")).map(([f]) => f);
       const apiFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("API") || d.layer.includes("Interface")).map(([f]) => f);
 
-      document.getElementById("sloth-entry-text").innerText = entryPoints.length 
-        ? `Start execution at: ${{entryPoints.join(", ")}}. This is where initialization takes place.`
-        : `No explicit entry point file found. Inspect top-level scripts or root modules.`;
+      document.getElementById("overview-entry-text").innerText = entryPoints.length 
+        ? `Execution begins at: ${{entryPoints.join(", ")}}.`
+        : `No explicit entry point found. Inspect top-level files.`;
 
-      document.getElementById("sloth-core-text").innerText = coreFiles.length 
-        ? `The heart of domain logic is encapsulated in: ${{coreFiles.join(", ")}}. Look here to understand core domain algorithms.`
-        : `Domain logic is distributed among the internal modules. Inspect dependencies in the center graph.`;
+      document.getElementById("overview-core-text").innerText = coreFiles.length 
+        ? `Core domain logic resides in: ${{coreFiles.join(", ")}}.`
+        : `Domain logic is distributed among internal modules.`;
 
-      document.getElementById("sloth-api-text").innerText = apiFiles.length
-        ? `External endpoints and interfaces are located in: ${{apiFiles.join(", ")}}.`
-        : `This appears to be an internal library or pipeline without separate HTTP endpoints.`;
+      document.getElementById("overview-api-text").innerText = apiFiles.length
+        ? `External endpoints and interfaces: ${{apiFiles.join(", ")}}.`
+        : `Internal library or pipeline without separate HTTP endpoints.`;
     }}
 
-    function openSlothModal() {{ document.getElementById("sloth-modal").classList.add("active"); }}
-    function closeSlothModal() {{ document.getElementById("sloth-modal").classList.remove("active"); }}
-    function closeSlothModalOnOut(e) {{ if (e.target.id === "sloth-modal") closeSlothModal(); }}
+    function openOverviewModal() {{ document.getElementById("overview-modal").classList.add("active"); }}
+    function closeOverviewModal() {{ document.getElementById("overview-modal").classList.remove("active"); }}
+    function closeOverviewModalOnOut(e) {{ if (e.target.id === "overview-modal") closeOverviewModal(); }}
 
     function showToast(msg) {{
       const t = document.getElementById("toast");
@@ -1497,16 +1607,18 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
     }}
 
     function copyMermaid() {{
-      navigator.clipboard.writeText(MERMAID_RAW).then(() => {{
-        showToast("✅ Mermaid code copied to clipboard!");
+      const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
+      navigator.clipboard.writeText(rawCode).then(() => {{
+        showToast("Mermaid diagram copied to clipboard");
       }}).catch(() => {{
-        showToast("⚠️ Could not access clipboard");
+        showToast("Could not access clipboard");
       }});
     }}
 
     function downloadMarkdown() {{
+      const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
       const ticks = "```";
-      const content = "# Architecture Overview: " + REPO_NAME + "\\n\\n" + ticks + "mermaid\\n" + MERMAID_RAW + "\\n" + ticks + "\\n";
+      const content = "# Architecture Overview: " + REPO_NAME + "\\n\\n" + ticks + "mermaid\\n" + rawCode + "\\n" + ticks + "\\n";
       const blob = new Blob([content], {{ type: "text/markdown;charset=utf-8" }});
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1514,11 +1626,11 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       a.download = "ARCHITECTURE.md";
       a.click();
       URL.revokeObjectURL(url);
-      showToast("📥 ARCHITECTURE.md downloaded!");
+      showToast("ARCHITECTURE.md downloaded");
     }}
 
     function downloadSVG() {{
-      const svg = document.querySelector("#graph-viewport svg");
+      const svg = panLayer.querySelector("svg");
       if (!svg) return;
       const serializer = new XMLSerializer();
       const source = serializer.serializeToString(svg);
@@ -1529,56 +1641,58 @@ def build_unified_html(mermaid_code: str, repo_name: str, summary: Dict[str, Any
       a.download = `${{REPO_NAME}}-architecture.svg`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("🖼️ SVG exported successfully!");
+      showToast("SVG exported successfully");
     }}
 
-    // Keyboard shortcuts
     window.addEventListener("keydown", (e) => {{
       if (e.key === "Escape") {{
         closeInspector();
-        closeSlothModal();
+        closeOverviewModal();
       }} else if ((e.metaKey || e.ctrlKey) && e.key === "k") {{
         e.preventDefault();
         document.getElementById("module-search")?.focus();
+      }} else if (e.key === "+" || e.key === "=") {{
+        zoomIn();
+      }} else if (e.key === "-" || e.key === "_") {{
+        zoomOut();
+      }} else if (e.key === "0" || e.key.toLowerCase() === "f") {{
+        fitToScreen(true);
+      }} else if (e.key.toLowerCase() === "t") {{
+        toggleLayout();
       }}
     }});
 
-    // Auto-resize pan-zoom on window resize
     window.addEventListener("resize", () => {{
-      if (panZoomInstance) {{
-        panZoomInstance.resize();
-        panZoomInstance.fit();
-        panZoomInstance.center();
-      }}
+      fitToScreen(false);
     }});
 
+    // Kick off
     initSidebar();
+    renderMermaidDiagram();
   </script>
 </body>
 </html>
 """
 
 def serve_directory(port: int = 8080):
-    """Starts a lightweight zero-dependency local HTTP server."""
     class QuietHandler(SimpleHTTPRequestHandler):
         def log_message(self, format, *args):
             pass
 
     server = HTTPServer(('localhost', port), QuietHandler)
     url = f"http://localhost:{port}/index.html"
-    print(f"\n🚀 RepoGraph Studio Live Server running at: {url}")
-    print("   Press Ctrl+C to stop server.\n")
+    print(f"\nRepoGraph Server running at: {url}")
+    print("Press Ctrl+C to stop.\n")
     try:
         webbrowser.open(url)
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n👋 Server stopped.")
+        print("\nServer stopped.")
         server.server_close()
 
 def main():
     args = sys.argv[1:]
     should_serve = "--serve" in args
-    force_no_ai = "--no-ai" in args
     output_json = "--json" in args
 
     target_dir = "."
@@ -1590,11 +1704,11 @@ def main():
     target_path = Path(target_dir).resolve()
     repo_name = resolve_repo_name(target_path)
 
-    print("\n" + "=" * 62)
-    print(f" [RepoGraph] - Architecture Intelligence: {repo_name}")
-    print("=" * 62)
+    print("\n" + "=" * 60)
+    print(f" RepoGraph: {repo_name}")
+    print("=" * 60)
 
-    print(f"\n[1/3] Parsing AST for repository: {repo_name}...")
+    print(f"\n[1/3] Parsing repository: {repo_name}...")
     summary = scan_repository(target_path)
 
     if not summary:
@@ -1609,63 +1723,23 @@ def main():
         print(json.dumps(summary, indent=2))
         return
 
-    model_to_use = "llama3.2:3b"
-    ollama_online = False
-    mermaid_code = ""
-
-    if not force_no_ai:
-        model_to_use, ollama_online = get_installed_ollama_model()
-        if ollama_online:
-            print(f"[2/3] Synthesizing architecture via Ollama ({model_to_use})...")
-            compact_summary = {
-                file: {
-                    "classes": data["classes"][:3],
-                    "functions": data["functions"][:3],
-                    "layer": data["layer"],
-                    "deps": data["internal_dependencies"]
-                }
-                for file, data in summary.items()
-            }
-            prompt = f"""You are a senior software architect. Convert this repository data into a Mermaid.js diagram (graph TD).
-Group files into subgraphs by architectural layer (e.g. Core, Controllers, Models, Utils).
-
-Data:
-{json.dumps(compact_summary, indent=2)}
-
-Strict Rules:
-1. Output ONLY valid Mermaid syntax starting with `graph TD`.
-2. Do not use quotes or special characters inside node IDs (use alphanumeric and underscores only).
-3. Do not include markdown ticks, explanation, or commentary.
-"""
-            raw_response = query_ollama(prompt, model=model_to_use)
-            if raw_response:
-                mermaid_code = clean_mermaid_output(raw_response)
-
-    if not mermaid_code or "graph TD" not in mermaid_code:
-        status_msg = "Ollama offline or --no-ai passed" if not ollama_online else "Ollama returned invalid syntax"
-        print(f"[2/3] {status_msg} -> Generating bulletproof deterministic AST graph...")
-        mermaid_code = generate_bulletproof_ast_mermaid(summary, direction="TD")
-        ollama_online = False
-    else:
-        print("      Architectural synthesis successful!")
+    print("[2/3] Constructing architectural dependency graph...")
+    mermaid_td = generate_bulletproof_ast_mermaid(summary, direction="TD")
+    mermaid_lr = generate_bulletproof_ast_mermaid(summary, direction="LR")
 
     print("[3/3] Exporting artifacts...")
-    
-    # 1. ARCHITECTURE.md (Markdown graph that renders natively on GitHub)
     with open("ARCHITECTURE.md", "w", encoding="utf-8") as f:
-        f.write(f"# Architecture Overview: {repo_name}\n\n```mermaid\n{mermaid_code}\n```\n")
+        f.write(f"# Architecture Overview: {repo_name}\n\n```mermaid\n{mermaid_td}\n```\n")
 
-    # 2. Both repograph.html and index.html are generated with this exact dataset!
-    ollama_status = {"online": ollama_online, "model": model_to_use}
-    html_page = build_unified_html(mermaid_code, repo_name, summary, ollama_status)
+    html_page = build_unified_html(mermaid_td, mermaid_lr, repo_name, summary)
     with open("repograph.html", "w", encoding="utf-8") as f:
         f.write(html_page)
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_page)
 
-    print("\n[OK] Success! All artifacts generated & synchronized:")
-    print("  📄 Markdown:    ARCHITECTURE.md (Renders natively on GitHub)")
-    print("  🌐 Interactive: repograph.html & index.html (Live Web & GitHub Pages)\n")
+    print("\nSuccess! Artifacts generated:")
+    print("  Markdown:    ARCHITECTURE.md")
+    print("  Interactive: repograph.html & index.html\n")
 
     if should_serve:
         serve_directory()

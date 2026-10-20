@@ -1,98 +1,89 @@
 ---
-title: RepoGraph: Zero-Read Codebase Onboarding with Local Open-Weight AI
+title: Building RepoGraph: A Sub-0.1s Deterministic Codebase Architecture Explorer
 published: true
-tags: opensourceai, hacktoberfest, python, ai
+tags: python, architecture, visualization, opensource
 canonical_url: https://github.com/sharan-s-dev/RepoGraph-
-cover_image: https://raw.githubusercontent.com/sharan-s-dev/RepoGraph-/main/repograph.html
+cover_image: https://raw.githubusercontent.com/sharan-s-dev/RepoGraph-/main/index.html
 ---
 
-## The "Sloth" Problem: Reading Code is Exhausting
+## The Architecture Problem: Mapping Codebases Fast
 
-They say the primary virtue of a programmer is laziness.
+Whenever engineers clone a complex open-source repository or join a new engineering team, the first few hours are often spent clicking through nested folders, tracing import chains, deciphering inheritance trees, and trying to reconstruct a mental map of what talks to what.
 
-Whenever I clone a new open-source repository or join a new engineering team, I dread the first two hours: clicking through endless nested folders, tracing import chains, deciphering inheritance trees, and trying to construct a mental map of what talks to what.
+Many modern code visualizers rely on heavy cloud LLMs or third-party graph dependencies. However, piping thousands of lines of raw code to external APIs introduces latency, token costs, hallucinated imports, and potential enterprise privacy concerns.
 
-In honor of **International Sloth Day** and the **Dev.to Hacktoberfest Open-Source AI Challenge** (Theme: *Slow and Steady / Sloth*), I asked a simple question:
-
-> *Why should I spend hours reading thousands of lines of code when my computer can map it out for me while I do absolutely nothing?*
-
-Meet **RepoGraph**—an offline, zero-read codebase onboarding tool that generates interactive, pan-and-zoom architectural blueprints in under 2 seconds.
+**RepoGraph** was created to solve this fundamentally using **deterministic Python Abstract Syntax Trees (AST)** paired with an interactive, zero-dependency browser blueprint.
 
 ---
 
 ## ⚡ What It Does
 
-You point RepoGraph at any local Python codebase from your terminal:
+From any terminal:
 
 ```bash
 python repograph.py ./my-project
 ```
 
-In under 2 seconds, with **zero `pip install` dependencies**, it outputs:
+In under **0.1 seconds**, with **zero `pip install` dependencies**, RepoGraph:
 
-1. **`repograph.html`**: A standalone, dark-mode interactive web dashboard with full SVG pan-and-zoom controls, a searchable module explorer, architectural layer filters, and a deep-dive module inspector drawer.
-2. **`ARCHITECTURE.md`**: A clean, mathematically accurate Mermaid.js diagram that renders directly inside GitHub repository READMEs and wiki docs.
+1. **Scans the AST:** Crawls classes, methods, signatures, docstrings, complexity, and cross-module import paths (including relative depth and `__init__.py` namespaces).
+2. **Clusters Architectural Layers:** Automatically classifies modules into structural tiers (*Application Entry, API & Interfaces, Core Domain, Data & Storage, Utilities & Shared, Configuration*).
+3. **Generates Blueprints:**
+   - **`index.html` & `repograph.html`:** Self-contained dark-mode interactive dashboards with a custom vector pan & zoom engine, orientation toggles (Top-Down ⇄ Left-to-Right), instant symbol search, and dependency pathway lighting.
+   - **`ARCHITECTURE.md`:** A clean Mermaid diagram ready to drop into GitHub READMEs and team documentation.
 
 ---
 
-## 🏗️ How It Works: The Zero-Lag Hybrid Architecture
-
-Most AI code visualizers fail because they dump thousands of raw lines into an LLM context window. That naive approach triggers token limits, high latency, huge API costs, and visual hallucinations.
-
-RepoGraph solves this with a **deterministic-first hybrid pipeline**:
+## 🏗️ Architecture Pipeline
 
 ```
-[Target Codebase] ──> [Python AST Engine (<0.1s)] ──> [Compact JSON Topology (~200 tokens)]
-                                                                  │
-                                                                  ▼
-[ARCHITECTURE.md] <── [Bulletproof Fallback] <─── [Local Ollama (llama3.2 / qwen2.5)]
-       &
-[repograph.html]
+┌─────────────────────────────────┐
+│       Target Python Repo        │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│     Python Native AST Engine    │  < 0.1s execution (Zero external pip deps)
+│  - Class hierarchies & bases    │
+│  - Method & function signatures │
+│  - Relative & package imports   │
+│  - Cyclomatic complexity score  │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────┐
+│     Architectural Clustering    │  Categorizes modules by responsibility
+│  - Application Entry            │  (Entry, API, Core, Data, Utils, Config)
+│  - Domain Boundaries            │
+└────────────────┬────────────────┘
+                 │
+         ┌───────┴───────┐
+         │               │
+         ▼               ▼
+┌────────────────┐ ┌──────────────────────────────────────┐
+│ARCHITECTURE.md │ │ index.html & repograph.html           │
+│Mermaid Markdown│ │ Interactive Vector Canvas             │
+│GitHub Native   │ │ (Pan, Zoom, Trace, Inspect, Exports) │
+└────────────────┘ └──────────────────────────────────────┘
 ```
 
-1. **Deterministic AST Parser (< 0.1s):** Using Python's native `ast` library, RepoGraph scans all classes, functions, and cross-module import chains with 100% mathematical precision.
-2. **Local Open-Weight Model (Ollama):** Instead of raw code, the local LLM receives a compact JSON summary (~200 tokens) to group modules into architectural subgraphs (*Application Entry, Core Domain, API Layer, Data & Storage, Utilities*).
-3. **Bulletproof Fallback Engine:** If Ollama is offline or returns an invalid syntax, RepoGraph's built-in AST layer clustering seamlessly generates a clean graph without crashing.
-4. **Interactive Web Canvas:** Renders a self-contained, high-performance dark-mode UI with `svg-pan-zoom` and Mermaid.js.
+---
+
+## 🎯 Engineering Highlights & Reliability
+
+Building an architecture visualizer that works reliably across disparate environments requires solving key edge cases:
+
+1. **Cross-Platform Path Normalization:** Windows backslashes (`\`) break graph node identifiers and web URL routing. RepoGraph standardizes on `.as_posix()` throughout the pipeline.
+2. **Mermaid Identifier Sanitization:** Special characters (`-`, `.`, `/`, spaces) cause syntax parsing exceptions. Strict alphanumeric normalization guarantees syntax stability.
+3. **Zero-Dependency Vector Canvas:** Rather than depending on heavy third-party CDN canvas libraries that can fail during layout reflows, RepoGraph implements a pure CSS transform matrix engine (`translate(x, y) scale(s)`) anchored to mouse cursor coordinates for smooth, infinite vector zooming.
+4. **Orientation Toggling (TD ⇄ LR):** Deep hierarchical codebases often read better vertically (Top-Down), while pipelines and data flows read better horizontally (Left-to-Right). RepoGraph embeds both layouts and lets developers toggle views in one click.
+5. **Pathway Lighting:** Selecting any node in the graph or sidebar illuminates its inbound callers (emerald green) and outbound dependencies (cyan), while dimming unrelated components.
 
 ---
 
-## 🎯 4 Battle-Tested Fixes That Prevent Crashes
-
-Hackathon and student visualizers often break in subtle environments. We audited RepoGraph against the 4 most notorious failure points:
-
-1. **Windows vs. Mac/Linux Path Separators:** Fixed by utilizing `Path.as_posix()` throughout the AST crawler so backslashes on Windows don't break graph node identifiers.
-2. **Mermaid Syntax Crashes:** Alphanumeric sanitization (`sanitize_id`) strips dashes, periods, slashes, and spaces, preventing the dreaded red `Syntax error in graph` modal.
-3. **Dynamic SVG Pan & Zoom:** Diagrams with more than 5 files normally clip off the screen. RepoGraph embeds `svg-pan-zoom` with a floating HUD (Zoom in, Zoom out, Fit, Reset) so judges can explore codebases of any size.
-4. **Auto-Model Detection:** Rather than crashing when a specific hardcoded model is missing, RepoGraph dynamically queries Ollama's local tags (`/api/tags`) to detect whatever model you have installed (`llama3.2:3b`, `qwen2.5-coder`, `gemma2`, etc.).
-5. **Console CharMap Encoding:** Automatically reconfigures Windows stdout/stderr to UTF-8 to prevent `UnicodeEncodeError` when rendering terminal status badges.
-
----
-
-## 🧠 Why Open Innovation Matters Here
-
-This project could not have been built responsibly using closed cloud APIs like OpenAI or Anthropic:
-
-1. **Enterprise Code Privacy:** You cannot pipe internal proprietary code, database schema names, and private microservice endpoints to external third-party cloud servers without violating data governance policies and enterprise NDAs. Open-weight models ensure everything stays 100% on your machine.
-2. **Zero Cost & Offline Resilience:** Whether you are on a flight without Wi-Fi or working in a secure air-gapped corporate network, running local inference via Ollama ensures unlimited runs for $0.
-3. **Deterministic Hybrid Reliability:** By pairing Python's native Abstract Syntax Tree (`ast`) module for deterministic dependency extraction with open-weight models (`llama3.2:3b` / `qwen2.5-coder`) for architectural clustering, the tool achieves sub-second execution with zero hallucinations.
-
----
-
-## 🦥 Zero-Read Sloth Mode: How to Onboard in 30 Seconds
-
-RepoGraph includes a dedicated **30s Lazy Guide** modal:
-- **Where Does Execution Begin?** Identifies application entry points (`app.py`, `main.py`, CLI commands).
-- **Core Business Engine:** Highlights the modules that house the fundamental business rules and algorithms.
-- **Data & API Boundaries:** Separates external endpoints from internal data stores.
-- **Extension Guide:** Explains how to add new features following the dependency hierarchy without creating cyclic imports.
-
----
-
-## 🛠️ Code & Repositories
+## 🛠️ Open-Source Repository & Live Demo
 
 - **GitHub Repository:** [https://github.com/sharan-s-dev/RepoGraph-](https://github.com/sharan-s-dev/RepoGraph-)
 - **Live Interactive Demo:** [https://sharan-s-dev.github.io/RepoGraph-/](https://sharan-s-dev.github.io/RepoGraph-/)
-- **Demo Codebase:** Includes a full multi-module demo architecture ready to test in seconds.
+- **License:** MIT License. Free and open source.
 
-Let your machine do the reading so you don't have to. 🦥 Happy Hacktoberfest!

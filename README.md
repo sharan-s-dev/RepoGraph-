@@ -1,114 +1,97 @@
-# ⚡ RepoGraph
+# RepoGraph
 
-> **Zero-Read Codebase Onboarding via Local AST + Open-Weight LLMs.**  
-> *Built for the Dev.to Hacktoberfest Open-Source AI Challenge (Theme: Slow and Steady / Sloth).*
+> **Fast, deterministic codebase architecture & dependency graph explorer for Python.**
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/pip%20dependencies-0-success.svg)](repograph.py)
-[![Privacy](https://img.shields.io/badge/privacy-100%25%20Air--Gapped-purple.svg)](repograph.py)
-[![Offline AI](https://img.shields.io/badge/Ollama-Offline%20First-orange.svg)](https://ollama.com)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0%20external-success.svg)](repograph.py)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](repograph.py)
 [![Live Demo](https://img.shields.io/badge/GitHub%20Pages-Live%20Demo-22c55e.svg)](https://sharan-s-dev.github.io/RepoGraph-/)
 
-Software engineers spend up to 70% of their onboarding time reading through spaghetti code.  
-**RepoGraph rewards pure laziness:** clone any repository, run one terminal command, and immediately get an interactive, pan-and-zoom architectural blueprint without reading a single line of source code.
+RepoGraph scans any Python codebase using Python's native Abstract Syntax Tree (AST) engine in under 0.1s and produces an interactive, zoomable architectural blueprint with deep dependency inspection.
 
-👉 **[Launch Live Interactive Web App on GitHub Pages](https://sharan-s-dev.github.io/RepoGraph-/)**
+🌐 **[Open Live Web Interface](https://sharan-s-dev.github.io/RepoGraph-/)**
 
 ---
 
-## 🏗️ How It Works (The Zero-Lag Hybrid Architecture)
-
-Most AI code visualizers fail because they dump thousands of raw lines into an LLM context window, causing token limits, high latency, and hallucinations. 
+## Architecture Pipeline
 
 ```
-                                  ┌───────────────────────────┐
-                                  │   Target Python Repo      │
-                                  └─────────────┬─────────────┘
-                                                │
-                                                ▼
-                                  ┌───────────────────────────┐
-                                  │   Python Native AST Engine │  < 0.1s (100% Deterministic)
-                                  │   - Classes & Methods     │
-                                  │   - Public Functions      │
-                                  │   - Import Topologies     │
-                                  └─────────────┬─────────────┘
-                                                │ Compact JSON Topology (~200 tokens)
-                                                ▼
-                     ┌─────────────────────────────────────────────────────┐
-                     │           Local LLM Inference (Ollama)              │
-                     │  - Models: llama3.2:3b, qwen2.5-coder, gemma2       │
-                     │  - Architectural Clustering & Subgraph Layering     │
-                     └──────────────────────────┬──────────────────────────┘
-                                                │
-                     ┌──────────────────────────┴──────────────────────────┐
-                     │                                                     │
-                     ▼                                                     ▼
-        ┌─────────────────────────┐                           ┌─────────────────────────┐
-        │     ARCHITECTURE.md     │                           │      index.html         │
-        │ Native GitHub Markdown  │                           │ Interactive Web App UI  │
-        │     Mermaid Diagram     │                           │ Pan/Zoom + Deep Inspect │
-        └─────────────────────────┘                           └─────────────────────────┘
+┌─────────────────────────┐
+│   Target Python Repo    │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Python Native AST Engine│  < 0.1s execution (Zero dependencies)
+│ - Class hierarchies     │
+│ - Public functions      │
+│ - Relative/abs imports  │
+│ - Cyclomatic complexity │
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│ Architectural Grouping  │  Deterministic layer clustering
+│ - Application Entry     │  (Entry, API, Core, Data, Utils, Config)
+│ - Domain Boundaries     │
+└────────────┬────────────┘
+             │
+     ┌───────┴───────┐
+     │               │
+     ▼               ▼
+┌──────────────┐ ┌──────────────────────────────────────┐
+│ARCHITECTURE.md│ │ index.html & repograph.html           │
+│Mermaid GitHub│ │ Interactive Canvas (Pan, Zoom, Trace)│
+└──────────────┘ └──────────────────────────────────────┘
 ```
 
-**RepoGraph takes a deterministic-first approach:**
-1. **Python AST Engine (< 0.1s):** Uses Python's native `ast` module to extract classes, functions, and cross-module internal dependencies with 100% mathematical accuracy. Zero third-party `pip` dependencies.
-2. **Local Open-Weight Model (Ollama):** Receives a clean, structured JSON topology (~200 tokens) to group components into architectural subgraphs (*Application Entry, Core Logic, API Layer, Data Access, Utilities*).
-3. **Bulletproof Fallback Engine:** If Ollama is offline or returns an invalid syntax, RepoGraph automatically switches to its deterministic AST layer clustering with zero downtime.
-4. **Interactive Web Workspace:** Generates a standalone, dark-mode `index.html` dashboard powered by `svg-pan-zoom` and Mermaid.js, complete with an in-browser Python folder parser, interactive module inspector drawer, and 30-second lazy onboarding guide.
+---
+
+## Features
+
+- **Sub-0.1s Deterministic Parsing:** Uses Python's native `ast` module. Extracts class definitions, methods, function signatures, and cross-module import paths with mathematical accuracy.
+- **Interactive Canvas with Native Pan & Zoom:** Custom zero-dependency transform engine that never clips or collapses. Smooth mouse drag, scroll wheel zoom, and mobile touch pinch-to-zoom.
+- **Dependency Pathway Lighting:** Click any module in the graph or sidebar to illuminate inbound callers (emerald green) and outbound dependencies (cyan), while dimming unrelated code.
+- **Deep Codebase Inspector:** Slide-out drawer displaying module docstrings, lines of code (LOC), complexity ratings, class methods with parameter signatures, and clickable dependency links.
+- **Layer Filtering & Instant Search:** Filter by architectural layer (*Application Entry, API, Core, Data, Utilities, Config*) or search classes and functions with instant diagram highlighting.
+- **Multi-Format Exports:** One-click export to vector SVG, Mermaid Markdown, and GitHub-ready `ARCHITECTURE.md`.
+- **Zero Third-Party Dependencies:** Standard library only (`ast`, `json`, `os`, `re`, `sys`, `pathlib`). No `pip install` required.
 
 ---
 
-## 🛡️ Why Open Innovation Matters Here
+## Quickstart
 
-* **100% Air-Gapped & Private:** Proprietary codebases cannot be uploaded to closed cloud APIs (like OpenAI or Anthropic) due to enterprise NDAs, privacy policies, and intellectual property constraints. RepoGraph runs 100% locally on your machine.
-* **$0 Infinite Inference:** Analyze codebases of any size with zero API bills, rate limits, or monthly SaaS subscriptions.
-* **Works Offline & on GitHub Pages:** Inspect repositories locally without internet, or access the live web app deployed on GitHub Pages.
-* **Platform Resilient:** Built and audited to eliminate path separator crashes on Windows (`.as_posix()`), Unicode encoding errors on Windows command prompts, and Mermaid diagram syntax breaks.
-
----
-
-## ⚡ Quickstart
-
-### Option A: Use the Web Interface (Zero Install)
-Visit the live GitHub Pages app:  
-🌐 **[https://sharan-s-dev.github.io/RepoGraph-/](https://sharan-s-dev.github.io/RepoGraph-/)**  
-Click **"📂 Open Local Repo"** or drag & drop any Python project folder right into the browser!
-
-### Option B: Run Locally via Python CLI
+### 1. Run Analysis on Any Repository
 ```bash
-# Analyze any local repository or directory
-python repograph.py demo_project
+# Analyze a specific directory
+python repograph.py ./my-project
 
-# Launch the live local server:
-python repograph.py demo_project --serve
+# Or analyze the current folder
+python repograph.py .
 ```
 
----
+### 2. Output Artifacts Generated
+- **`index.html` & `repograph.html`:** Self-contained interactive web dashboards. Double-click to open in any browser.
+- **`ARCHITECTURE.md`:** Valid Mermaid markdown diagram that renders natively inside GitHub READMEs and wikis.
 
-## 🎯 Production-Grade Audit & Reliability Fixes
-
-RepoGraph was specifically battle-tested to eliminate the 4 most common failure points that break student and hackathon visualizers:
-
-| Failure Point | Why Other Tools Crash | RepoGraph Battle-Tested Solution |
-| :--- | :--- | :--- |
-| **Path Separators** | Windows backslashes (`\`) break graph node IDs and syntax | Uses `Path.as_posix()` normalized relative paths across all operating systems |
-| **Mermaid Syntax** | Dashes, slashes, and dots trigger red `Syntax error in graph` popups | Alphanumeric sanitization (`sanitize_id`) guarantees bulletproof Mermaid node IDs |
-| **Pan & Zoom Clipping** | Repos with >5 files clip off-screen and become unreadable | Integrated dynamic `svg-pan-zoom` with custom floating HUD (Zoom, Reset, Fit) |
-| **Missing AI Models** | Hardcoded model strings crash if the user doesn't have that model | Auto-queries Ollama's local tags (`/api/tags`) to detect whatever model is installed |
-| **Windows Console CP1252** | Emoji prints trigger `UnicodeEncodeError: 'charmap'` on Windows CMD | Automatic UTF-8 stream reconfiguration on Windows consoles |
+### 3. Launch Built-in Local Server (Optional)
+```bash
+python repograph.py ./my-project --serve
+```
+Starts a lightweight local HTTP server at `http://localhost:8080/index.html` and automatically opens your browser.
 
 ---
 
-## 🦥 The "Sloth" Features (Zero-Read Onboarding)
+## Platform Reliability
 
-* **30-Second Lazy Guide Modal:** Identifies where execution begins, which files contain the core business algorithms, and how to extend the codebase without reading raw source code.
-* **Interactive Module Inspector:** Click any node in the graph or sidebar to see lines of code (LOC), complexity rank, class method signatures, and direct inbound/outbound dependencies.
-* **Architecture Layer Filtering:** Filter by layer (*Application Entry, Core & Domain, API & Interface, Data & Storage, Utilities*).
-* **One-Click Exports:** Copy Mermaid code directly to your clipboard or download `ARCHITECTURE.md` and SVG vector diagrams.
+- **Windows & Unix Path Normalization:** Standardizes on `.as_posix()` to eliminate backslash syntax issues across operating systems.
+- **Mermaid ID Sanitization:** Strict alphanumeric formatting prevents syntax parsing crashes on special characters.
+- **Windows Console UTF-8 Safety:** Reconfigures console streams to avoid `cp1252` encoding errors on Windows command prompts.
+- **Relative Import Depth Resolution:** Fully maps package-level relative imports (`from . import foo`, `from ..bar import baz`) and `__init__.py` namespaces.
 
 ---
 
-## 📄 License
+## License
 
-MIT License. Free and open source for everyone.
+MIT License. Free and open source.
