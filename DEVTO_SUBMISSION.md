@@ -2,8 +2,8 @@
 title: RepoGraph: Zero-Read Codebase Onboarding with Local Open-Weight AI
 published: true
 tags: opensourceai, hacktoberfest, python, ai
-canonical_url: https://github.com/your-username/RepoGraph
-cover_image: https://raw.githubusercontent.com/your-username/RepoGraph/main/banner.png
+canonical_url: https://github.com/sharan-s-dev/RepoGraph-
+cover_image: https://raw.githubusercontent.com/sharan-s-dev/RepoGraph-/main/repograph.html
 ---
 
 ## The "Sloth" Problem: Reading Code is Exhausting
@@ -91,7 +91,8 @@ RepoGraph includes a dedicated **30s Lazy Guide** modal:
 
 ## 🛠️ Code & Repositories
 
-- **GitHub Repository:** [https://github.com/your-username/RepoGraph](https://github.com/your-username/RepoGraph)
+- **GitHub Repository:** [https://github.com/sharan-s-dev/RepoGraph-](https://github.com/sharan-s-dev/RepoGraph-)
+- **Live Interactive Demo:** [https://sharan-s-dev.github.io/RepoGraph-/](https://sharan-s-dev.github.io/RepoGraph-/)
 - **Demo Codebase:** Includes a full multi-module demo architecture ready to test in seconds.
 
 Let your machine do the reading so you don't have to. 🦥 Happy Hacktoberfest!
