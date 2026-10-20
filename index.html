@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RepoGraph Studio - Zero-Read Codebase Architecture Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+  <style>
+    :root {
+      --bg-base: #06080e;
+      --bg-surface: #0c111d;
+      --bg-surface-elevated: #12192c;
+      --border: #1e293b;
+      --border-focus: #38bdf8;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-faint: #475569;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.28);
+      --emerald: #34d399;
+      --amber: #fbbf24;
+      --indigo: #818cf8;
+      --rose: #fb7185;
+      --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-base);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(129, 140, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(#1e293b 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 30px 30px;
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Nav */
+    header.top-nav {
+      height: 64px;
+      background: rgba(12, 17, 29, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .title-group h1 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-group p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .repo-select {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .btn {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.18s ease;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      background: #1e293b;
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border: 1px solid #38bdf8;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #1d4ed8);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .btn-emerald {
+      background: linear-gradient(135deg, #059669, #10b981);
+      border: 1px solid #34d399;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .btn-emerald:hover {
+      box-shadow: 0 0 16px rgba(52, 211, 153, 0.35);
+    }
+
+    /* Workspace */
+    .workspace {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Left Sidebar */
+    aside.sidebar {
+      width: 320px;
+      background: rgba(12, 17, 29, 0.85);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .search-box {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: #090d16;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 8px 12px 8px 32px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    .search-box .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .upload-strip {
+      display: flex;
+      gap: 6px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      padding: 12px 16px;
+      background: rgba(9, 13, 22, 0.6);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .metric-card {
+      background: var(--bg-surface-elevated);
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .metric-card .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .metric-card .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      font-family: var(--font-mono);
+      margin-top: 2px;
+    }
+
+    .layer-filters {
+      padding: 10px 16px 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .layer-chip {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .layer-chip:hover, .layer-chip.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .module-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+    }
+
+    .module-item {
+      padding: 9px 12px;
+      margin-bottom: 6px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid transparent;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .module-item:hover, .module-item.selected {
+      background: #1e293b;
+      border-color: var(--accent);
+      transform: translateX(2px);
+    }
+
+    .module-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .module-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tag-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    /* Viewport */
+    main.viewport {
+      flex: 1;
+      position: relative;
+      background: #07090e;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #graph-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .viewport-controls {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 6px;
+      background: rgba(12, 17, 29, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      z-index: 30;
+    }
+
+    .control-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s ease;
+    }
+
+    .control-btn:hover {
+      background: #1e293b;
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .hint-chip {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(12, 17, 29, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    /* Inspector Drawer */
+    aside.inspector {
+      width: 360px;
+      background: rgba(12, 17, 29, 0.95);
+      backdrop-filter: blur(16px);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 25;
+      transform: translateX(100%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      box-shadow: -8px 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    aside.inspector.open {
+      transform: translateX(0);
+    }
+
+    .inspector-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .inspector-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .symbol-pill {
+      display: inline-block;
+      padding: 4px 8px;
+      margin: 2px 4px 4px 0;
+      border-radius: 5px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: #38bdf8;
+    }
+
+    .dep-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 5px;
+      cursor: pointer;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .dep-link:hover {
+      border-color: var(--accent);
+      background: #131b2e;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      max-width: 680px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      padding: 24px;
+      position: relative;
+    }
+
+    .modal-dialog h3 {
+      font-size: 20px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .guide-step {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 12px;
+    }
+
+    .guide-step h4 {
+      font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+
+    .guide-step p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .code-box {
+      background: #07090e;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #38bdf8;
+      margin-top: 8px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* Drag & Drop Overlay */
+    #drop-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 132, 199, 0.15);
+      backdrop-filter: blur(6px);
+      border: 3px dashed var(--accent);
+      z-index: 80;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      pointer-events: none;
+    }
+
+    #drop-overlay.dragover {
+      display: flex;
+    }
+
+    #drop-overlay h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0284c7;
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 20px rgba(2, 132, 199, 0.4);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 200;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    svg { cursor: grab; }
+    svg:active { cursor: grabbing; }
+  </style>
+</head>
+<body>
+
+  <!-- Hidden File Input for Folder Upload -->
+  <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelect(this.files)">
+
+  <!-- Drag and drop visual indicator -->
+  <div id="drop-overlay">
+    <h2>📁 Drop Python Repository Folder Here</h2>
+    <p style="color:var(--text-muted); margin-top:6px;">Instant in-browser AST & Blueprint generation</p>
+  </div>
+
+  <!-- Top Navigation -->
+  <header class="top-nav">
+    <div class="brand-group">
+      <div class="logo-badge">⚡</div>
+      <div class="title-group">
+        <h1 id="header-repo-title">RepoGraph Studio</h1>
+        <p>Zero-Read Architecture Intelligence & Interactive Blueprint</p>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <!-- Repo Switcher -->
+      <select class="repo-select" id="dataset-switcher" onchange="switchDataset(this.value)">
+        <option value="demo_project">Active: demo_project (6 modules)</option>
+        <option value="fastapi_service">Demo: FastAPI Microservice (8 modules)</option>
+        <option value="ml_pipeline">Demo: ML Training Pipeline (9 modules)</option>
+      </select>
+
+      <button class="btn btn-emerald" onclick="triggerFolderSelect()">
+        <span>📂 Open Local Repo</span>
+      </button>
+
+      <button class="btn" onclick="openDeployModal()">
+        <span>🚀 GitHub Pages Deploy</span>
+      </button>
+
+      <button class="btn" onclick="openSlothModal()">
+        <span>🦥 30s Guide</span>
+      </button>
+
+      <button class="btn" onclick="copyMermaid()">
+        <span>📋 Copy Mermaid</span>
+      </button>
+
+      <button class="btn btn-primary" onclick="downloadMarkdown()">
+        <span>⬇ Export Markdown</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace -->
+  <div class="workspace" id="workspace-container">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="module-search" placeholder="Filter modules, classes, functions..." oninput="handleSearch(this.value)">
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="label">Modules</div>
+          <div class="value" id="stat-modules">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Classes</div>
+          <div class="value" id="stat-classes">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Functions</div>
+          <div class="value" id="stat-functions">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Dep Edges</div>
+          <div class="value" id="stat-edges">0</div>
+        </div>
+      </div>
+
+      <div class="layer-filters" id="layer-filters">
+        <span class="layer-chip active" onclick="filterByLayer('ALL')">All</span>
+      </div>
+
+      <div class="module-list" id="module-list">
+      </div>
+    </aside>
+
+    <!-- Center Canvas -->
+    <main class="viewport" id="graph-viewport">
+      <div class="viewport-controls">
+        <button class="control-btn" title="Zoom In (+)" onclick="zoomIn()">+</button>
+        <button class="control-btn" title="Zoom Out (-)" onclick="zoomOut()">−</button>
+        <button class="control-btn" title="Reset View (0)" onclick="resetZoom()">🎯</button>
+        <button class="control-btn" title="Fit Diagram" onclick="fitDiagram()">⛶</button>
+        <button class="control-btn" title="Toggle Orientation (TD / LR)" onclick="toggleOrientation()">⇄</button>
+      </div>
+
+      <div id="graph-container">
+        <div class="mermaid" id="mermaid-render-target"></div>
+      </div>
+
+      <div class="hint-chip">
+        💡 Drag to Pan &bull; Scroll to Zoom &bull; Drag & Drop Folder Anywhere to Parse
+      </div>
+    </main>
+
+    <!-- Right Inspector Drawer -->
+    <aside class="inspector" id="inspector-drawer">
+      <div class="inspector-header">
+        <div>
+          <span class="tag-badge" id="insp-layer">Core</span>
+          <h2 style="font-size: 16px; margin-top: 4px;" id="insp-file">module.py</h2>
+        </div>
+        <button class="control-btn" onclick="closeInspector()">✕</button>
+      </div>
+
+      <div class="inspector-body">
+        <div>
+          <div class="section-title">Module Summary</div>
+          <p style="font-size: 13px; color: var(--text-muted); line-height: 1.4;" id="insp-doc"></p>
+        </div>
+
+        <div>
+          <div class="section-title">Code Metrics</div>
+          <div style="display: flex; gap: 8px;">
+            <div class="metric-card" style="flex:1;">
+              <div class="label">Lines of Code</div>
+              <div class="value" id="insp-loc">0</div>
+            </div>
+            <div class="metric-card" style="flex:1;">
+              <div class="label">Complexity</div>
+              <div class="value" id="insp-complexity">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="insp-classes-section">
+          <div class="section-title">Classes Defined</div>
+          <div id="insp-classes"></div>
+        </div>
+
+        <div id="insp-functions-section">
+          <div class="section-title">Public Functions</div>
+          <div id="insp-functions"></div>
+        </div>
+
+        <div>
+          <div class="section-title">Outbound Dependencies (Imports)</div>
+          <div id="insp-deps"></div>
+        </div>
+
+        <div>
+          <div class="section-title">Inbound Dependencies (Imported By)</div>
+          <div id="insp-imported-by"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Sloth Modal -->
+  <div class="modal-overlay" id="sloth-modal" onclick="closeSlothModalOnOut(event)">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>🦥 30-Second Lazy Onboarding Guide</h3>
+        <button class="control-btn" onclick="closeSlothModal()">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+        Everything you need to know about <strong id="sloth-repo-name">the codebase</strong> without reading any code.
+      </p>
+
+      <div class="guide-step">
+        <h4>🚀 1. Where Does Execution Begin?</h4>
+        <p id="sloth-entry-text">Analyzing entry points...</p>
+      </div>
+
+      <div class="guide-step">
+        <h4>🧠 2. Core Business Engine</h4>
+        <p id="sloth-core-text">Analyzing domain layers...</p>
+      </div>
+
+      <div class="guide-step">
+        <h4>🌐 3. Data & API Boundaries</h4>
+        <p id="sloth-api-text">Analyzing interfaces...</p>
+      </div>
+
+      <div class="guide-step">
+        <h4>🛠️ 4. How to Extend This Codebase</h4>
+        <p>Follow the dependency direction in the diagram. Import shared utilities from the utility modules without creating backward cycles to the entry files.</p>
+      </div>
+
+      <div style="margin-top: 18px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeSlothModal()">Got it, back to the Blueprint</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GitHub Pages Deploy Modal -->
+  <div class="modal-overlay" id="deploy-modal" onclick="closeDeployModalOnOut(event)">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>🚀 GitHub Pages Deployment & Git Workflow</h3>
+        <button class="control-btn" onclick="closeDeployModal()">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+        How to commit, push, pull, and deploy this interactive RepoGraph web app to GitHub Pages.
+      </p>
+
+      <div class="guide-step">
+        <h4>Step 1: Commit and Push to Your GitHub Repository</h4>
+        <div class="code-box">git init
+git add .
+git commit -m "feat: RepoGraph Interactive Architecture Studio"
+git branch -M main
+git remote add origin https://github.com/&lt;your-username&gt;/RepoGraph.git
+git push -u origin main</div>
+      </div>
+
+      <div class="guide-step">
+        <h4>Step 2: Enable Automated GitHub Pages Deployment</h4>
+        <p>1. Open your repository on GitHub &rarr; <strong>Settings</strong> &rarr; <strong>Pages</strong>.</p>
+        <p>2. Under <strong>Build and deployment &gt; Source</strong>, choose <strong>GitHub Actions</strong>.</p>
+        <p>3. That's it! The included <code style="color:var(--accent);">.github/workflows/deploy.yml</code> workflow automatically builds and deploys your site to:</p>
+        <div class="code-box">https://&lt;your-username&gt;.github.io/RepoGraph/</div>
+      </div>
+
+      <div class="guide-step">
+        <h4>Step 3: Daily Pull & Push Updates</h4>
+        <p>Whenever you update code locally or scan new repos:</p>
+        <div class="code-box"># Pull latest changes
+git pull origin main
+
+# Re-scan local repo
+python repograph.py demo_project
+
+# Commit & push to auto-update GitHub Pages
+git add .
+git commit -m "update: architecture blueprint"
+git push origin main</div>
+      </div>
+
+      <div style="margin-top: 18px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeDeployModal()">Ready to Deploy</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">Mermaid markdown copied to clipboard!</div>
+
+  <!-- Application Logic -->
+  <script>
+    // Pre-built Architecture Datasets
+    const DATASETS = {
+      demo_project: {
+        name: "demo_project",
+        summary: {
+          "app.py": {
+            id: "app_py",
+            file: "app.py",
+            layer: "Application Entry",
+            docstring: "Demo Application Entry Point. Initializes the HTTP server and coordinates core services.",
+            classes: ["Application"],
+            class_details: { "Application": { "methods": ["start"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["api/routes.py", "config/settings.py", "core/engine.py"],
+            has_entry_point: true,
+            loc: 24,
+            complexity: 4,
+            imported_by: []
+          },
+          "api/routes.py": {
+            id: "api_routes_py",
+            file: "api/routes.py",
+            layer: "API & Interface",
+            docstring: "API Routing & Request Handlers. Exposes endpoints for user authentication and transaction processing.",
+            classes: ["APIRouter"],
+            class_details: { "APIRouter": { "methods": ["get_user_profile", "register_endpoint", "listen"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["core/engine.py", "models/user.py"],
+            has_entry_point: false,
+            loc: 21,
+            complexity: 5,
+            imported_by: ["app.py"]
+          },
+          "config/settings.py": {
+            id: "config_settings_py",
+            file: "config/settings.py",
+            layer: "Configuration",
+            docstring: "Environment configuration management and defaults.",
+            classes: ["AppConfig"],
+            class_details: { "AppConfig": { "methods": [], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: [],
+            has_entry_point: false,
+            loc: 11,
+            complexity: 3,
+            imported_by: ["app.py"]
+          },
+          "core/engine.py": {
+            id: "core_engine_py",
+            file: "core/engine.py",
+            layer: "Core & Domain",
+            docstring: "Core Workflow Execution Engine. Orchestrates domain validation, cryptographic verification, and state transitions.",
+            classes: ["WorkflowEngine"],
+            class_details: { "WorkflowEngine": { "methods": ["fetch_profile", "register_user", "dispatch_event"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["models/user.py", "utils/crypto.py"],
+            has_entry_point: false,
+            loc: 23,
+            complexity: 6,
+            imported_by: ["app.py", "api/routes.py"]
+          },
+          "models/user.py": {
+            id: "models_user_py",
+            file: "models/user.py",
+            layer: "Data & Storage",
+            docstring: "Data entities and schema definitions for user accounts and security roles.",
+            classes: ["UserRole", "UserModel"],
+            class_details: { "UserModel": { "methods": ["to_dict"], "bases": [] }, "UserRole": { "methods": [], "bases": ["str", "Enum"] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: [],
+            has_entry_point: false,
+            loc: 17,
+            complexity: 4,
+            imported_by: ["api/routes.py", "core/engine.py"]
+          },
+          "utils/crypto.py": {
+            id: "utils_crypto_py",
+            file: "utils/crypto.py",
+            layer: "Utilities & Shared",
+            docstring: "Cryptographic utility functions and security hashing helpers.",
+            classes: [],
+            class_details: {},
+            functions: ["hash_secret", "generate_token"],
+            all_functions_count: 2,
+            internal_dependencies: [],
+            has_entry_point: false,
+            loc: 14,
+            complexity: 3,
+            imported_by: ["core/engine.py"]
+          }
+        }
+      },
+      fastapi_service: {
+        name: "FastAPI Auth & Payments Service",
+        summary: {
+          "main.py": {
+            id: "main_py",
+            file: "main.py",
+            layer: "Application Entry",
+            docstring: "ASGI Application Entry point for FastAPI.",
+            classes: [],
+            class_details: {},
+            functions: ["lifespan", "create_app"],
+            all_functions_count: 2,
+            internal_dependencies: ["routers/auth.py", "routers/billing.py", "core/config.py"],
+            has_entry_point: true,
+            loc: 45,
+            complexity: 5,
+            imported_by: []
+          },
+          "routers/auth.py": {
+            id: "routers_auth_py",
+            file: "routers/auth.py",
+            layer: "API & Interface",
+            docstring: "OAuth2 and JWT token authentication routes.",
+            classes: ["AuthRouter"],
+            class_details: { "AuthRouter": { "methods": ["login", "refresh"], "bases": [] } },
+            functions: ["verify_jwt"],
+            all_functions_count: 1,
+            internal_dependencies: ["services/auth_service.py", "schemas/user.py"],
+            has_entry_point: false,
+            loc: 68,
+            complexity: 8,
+            imported_by: ["main.py"]
+          },
+          "routers/billing.py": {
+            id: "routers_billing_py",
+            file: "routers/billing.py",
+            layer: "API & Interface",
+            docstring: "Stripe webhook handling and subscription management.",
+            classes: ["BillingRouter"],
+            class_details: { "BillingRouter": { "methods": ["webhook", "create_checkout"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["services/payment_service.py", "schemas/invoice.py"],
+            has_entry_point: false,
+            loc: 82,
+            complexity: 9,
+            imported_by: ["main.py"]
+          },
+          "services/auth_service.py": {
+            id: "services_auth_service_py",
+            file: "services/auth_service.py",
+            layer: "Core & Domain",
+            docstring: "Cryptographic credential validation and session issuing.",
+            classes: ["AuthService"],
+            class_details: { "AuthService": { "methods": ["authenticate", "issue_token"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["repositories/user_repo.py", "utils/jwt_helper.py"],
+            has_entry_point: false,
+            loc: 110,
+            complexity: 12,
+            imported_by: ["routers/auth.py"]
+          },
+          "services/payment_service.py": {
+            id: "services_payment_service_py",
+            file: "services/payment_service.py",
+            layer: "Core & Domain",
+            docstring: "Stripe gateway adapter and ledger reconciler.",
+            classes: ["PaymentService"],
+            class_details: { "PaymentService": { "methods": ["charge", "refund"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["repositories/invoice_repo.py", "core/config.py"],
+            has_entry_point: false,
+            loc: 95,
+            complexity: 11,
+            imported_by: ["routers/billing.py"]
+          },
+          "repositories/user_repo.py": {
+            id: "repositories_user_repo_py",
+            file: "repositories/user_repo.py",
+            layer: "Data & Storage",
+            docstring: "PostgreSQL async SQLAlchemy repository for users.",
+            classes: ["UserRepository"],
+            class_details: { "UserRepository": { "methods": ["get_by_email", "save"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["schemas/user.py"],
+            has_entry_point: false,
+            loc: 75,
+            complexity: 7,
+            imported_by: ["services/auth_service.py"]
+          },
+          "schemas/user.py": {
+            id: "schemas_user_py",
+            file: "schemas/user.py",
+            layer: "Data & Storage",
+            docstring: "Pydantic V2 schemas for user payloads and responses.",
+            classes: ["UserCreate", "UserResponse"],
+            class_details: { "UserCreate": { "methods": [], "bases": [] }, "UserResponse": { "methods": [], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: [],
+            has_entry_point: false,
+            loc: 38,
+            complexity: 3,
+            imported_by: ["routers/auth.py", "repositories/user_repo.py"]
+          },
+          "utils/jwt_helper.py": {
+            id: "utils_jwt_helper_py",
+            file: "utils/jwt_helper.py",
+            layer: "Utilities & Shared",
+            docstring: "HS256 signature validation and token encoding.",
+            classes: [],
+            class_details: {},
+            functions: ["encode_jwt", "decode_jwt"],
+            all_functions_count: 2,
+            internal_dependencies: ["core/config.py"],
+            has_entry_point: false,
+            loc: 28,
+            complexity: 4,
+            imported_by: ["services/auth_service.py"]
+          }
+        }
+      },
+      ml_pipeline: {
+        name: "PyTorch Distributed Pipeline",
+        summary: {
+          "train.py": {
+            id: "train_py",
+            file: "train.py",
+            layer: "Application Entry",
+            docstring: "Distributed training orchestrator and CLI runner.",
+            classes: ["Trainer"],
+            class_details: { "Trainer": { "methods": ["fit", "checkpoint"], "bases": [] } },
+            functions: ["main"],
+            all_functions_count: 1,
+            internal_dependencies: ["models/transformer.py", "data/loader.py", "utils/distributed.py"],
+            has_entry_point: true,
+            loc: 140,
+            complexity: 15,
+            imported_by: []
+          },
+          "models/transformer.py": {
+            id: "models_transformer_py",
+            file: "models/transformer.py",
+            layer: "Core & Domain",
+            docstring: "Attention mechanisms, feed-forward layers, and embeddings.",
+            classes: ["TransformerModel", "AttentionHead"],
+            class_details: { "TransformerModel": { "methods": ["forward"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["models/layers.py"],
+            has_entry_point: false,
+            loc: 210,
+            complexity: 18,
+            imported_by: ["train.py"]
+          },
+          "data/loader.py": {
+            id: "data_loader_py",
+            file: "data/loader.py",
+            layer: "Data & Storage",
+            docstring: "HuggingFace dataset streaming, tokenization, and sharding.",
+            classes: ["StreamingDataset"],
+            class_details: { "StreamingDataset": { "methods": ["__iter__", "collate_fn"], "bases": [] } },
+            functions: [],
+            all_functions_count: 0,
+            internal_dependencies: ["utils/tokenizer.py"],
+            has_entry_point: false,
+            loc: 85,
+            complexity: 8,
+            imported_by: ["train.py"]
+          },
+          "utils/distributed.py": {
+            id: "utils_distributed_py",
+            file: "utils/distributed.py",
+            layer: "Utilities & Shared",
+            docstring: "NCCL process group initializations and rank synchronization.",
+            classes: [],
+            class_details: {},
+            functions: ["init_distributed", "all_reduce_average"],
+            all_functions_count: 2,
+            internal_dependencies: [],
+            has_entry_point: false,
+            loc: 54,
+            complexity: 6,
+            imported_by: ["train.py"]
+          }
+        }
+      }
+    };
+
+    let currentDatasetKey = "demo_project";
+    let currentOrientation = "TD";
+    let panZoomInstance = null;
+    let currentMermaidCode = "";
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      themeVariables: {
+        darkMode: true,
+        background: '#07090e',
+        primaryColor: '#0284c7',
+        primaryTextColor: '#f8fafc',
+        lineColor: '#38bdf8'
+      }
+    });
+
+    function sanitizeId(str) {
+      let cleaned = str.replace(/[^a-zA-Z0-9_]/g, '_');
+      if (cleaned && /^\d/.test(cleaned)) cleaned = 'n_' + cleaned;
+      return cleaned || 'node_root';
+    }
+
+    function generateMermaidFromSummary(summary, direction) {
+      const lines = [
+        `graph ${direction}`,
+        "  %% RepoGraph Architecture Blueprint",
+        "  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;",
+        "  classDef apiNode fill:#164e63,stroke:#22d3ee,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef coreNode fill:#064e3b,stroke:#34d399,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef dataNode fill:#431407,stroke:#fb923c,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef utilNode fill:#312e81,stroke:#a78bfa,stroke-width:1.5px,color:#f8fafc;",
+        "  classDef defaultNode fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;"
+      ];
+
+      const layers = {};
+      for (const [file, data] of Object.entries(summary)) {
+        const layer = data.layer || "Domain Services";
+        if (!layers[layer]) layers[layer] = [];
+        layers[layer].push([file, data]);
+      }
+
+      const layerStyles = {
+        "Application Entry": "entryNode",
+        "API & Interface": "apiNode",
+        "Core & Domain": "coreNode",
+        "Data & Storage": "dataNode",
+        "Utilities & Shared": "utilNode",
+        "Configuration": "utilNode"
+      };
+
+      for (const [layerName, items] of Object.entries(layers)) {
+        const subId = "layer_" + sanitizeId(layerName);
+        lines.push(`  subgraph ${subId}["${layerName}"]`);
+        for (const [file, data] of items) {
+          const parts = [file];
+          if (data.classes && data.classes.length) parts.push("📦 " + data.classes.slice(0, 2).join(", "));
+          else if (data.functions && data.functions.length) parts.push("⚡ " + data.functions.slice(0, 2).join(", "));
+          
+          let cleanLabel = parts.join(" | ").replace(/"/g, "'");
+          let styleClass = layerStyles[layerName] || "defaultNode";
+          if (data.has_entry_point) {
+            styleClass = "entryNode";
+            cleanLabel = "🚀 " + cleanLabel;
+          }
+          lines.push(`    ${data.id}["${cleanLabel}"]:::${styleClass}`);
+        }
+        lines.push("  end");
+      }
+
+      const edgesAdded = new Set();
+      for (const [file, data] of Object.entries(summary)) {
+        for (const dep of data.internal_dependencies) {
+          if (summary[dep]) {
+            const edgeKey = `${data.id}->${summary[dep].id}`;
+            if (!edgesAdded.has(edgeKey)) {
+              lines.push(`  ${data.id} --> ${summary[dep].id}`);
+              edgesAdded.add(edgeKey);
+            }
+          }
+        }
+      }
+
+      return lines.join("\n");
+    }
+
+    async function renderCurrentDataset() {
+      const dataset = DATASETS[currentDatasetKey];
+      document.getElementById("header-repo-title").innerText = `RepoGraph: ${dataset.name}`;
+      document.getElementById("sloth-repo-name").innerText = dataset.name;
+
+      const files = Object.keys(dataset.summary);
+      let totalClasses = 0, totalFuncs = 0, totalEdges = 0;
+      files.forEach(f => {
+        const d = dataset.summary[f];
+        totalClasses += (d.classes || []).length;
+        totalFuncs += d.all_functions_count || (d.functions || []).length;
+        totalEdges += (d.internal_dependencies || []).length;
+      });
+
+      document.getElementById("stat-modules").innerText = files.length;
+      document.getElementById("stat-classes").innerText = totalClasses;
+      document.getElementById("stat-functions").innerText = totalFuncs;
+      document.getElementById("stat-edges").innerText = totalEdges;
+
+      renderSidebar(dataset.summary);
+
+      currentMermaidCode = generateMermaidFromSummary(dataset.summary, currentOrientation);
+      const container = document.getElementById("mermaid-render-target");
+      container.removeAttribute("data-processed");
+      container.innerHTML = "";
+
+      const uniqueId = "mermaid_svg_" + Date.now();
+      try {
+        const { svg } = await mermaid.render(uniqueId, currentMermaidCode);
+        container.innerHTML = svg;
+        const svgEl = container.querySelector("svg");
+        if (svgEl) {
+          svgEl.setAttribute("style", "width: 100%; height: 100%;");
+          if (panZoomInstance) {
+            panZoomInstance.destroy();
+          }
+          panZoomInstance = svgPanZoom(svgEl, {
+            zoomEnabled: true,
+            controlIconsEnabled: false,
+            fit: true,
+            center: true,
+            minZoom: 0.2,
+            maxZoom: 12,
+            zoomScaleSensitivity: 0.3
+          });
+          attachSvgNodeListeners();
+        }
+      } catch (err) {
+        console.error("Mermaid Render Error:", err);
+      }
+    }
+
+    function renderSidebar(summary) {
+      const list = document.getElementById("module-list");
+      const filterContainer = document.getElementById("layer-filters");
+      const layers = new Set();
+      list.innerHTML = "";
+      filterContainer.innerHTML = '<span class="layer-chip active" onclick="filterByLayer(\'ALL\')">All</span>';
+
+      for (const [file, data] of Object.entries(summary)) {
+        layers.add(data.layer);
+        const item = document.createElement("div");
+        item.className = "module-item";
+        item.id = `mod-item-${data.id}`;
+        item.onclick = () => inspectModule(file);
+
+        item.innerHTML = `
+          <div class="module-title">
+            <span style="overflow:hidden; text-overflow:ellipsis;">${file}</span>
+            <span class="tag-badge">${(data.layer || "Core").split(' ')[0]}</span>
+          </div>
+          <div class="module-sub">
+            ${data.classes && data.classes.length ? '📦 ' + data.classes.join(', ') : '⚡ ' + ((data.functions && data.functions.slice(0,3).join(', ')) || 'module')}
+          </div>
+        `;
+        list.appendChild(item);
+      }
+
+      layers.forEach(layer => {
+        const chip = document.createElement("span");
+        chip.className = "layer-chip";
+        chip.innerText = layer;
+        chip.onclick = () => filterByLayer(layer);
+        filterContainer.appendChild(chip);
+      });
+
+      populateSlothModal(summary);
+    }
+
+    function attachSvgNodeListeners() {
+      const summary = DATASETS[currentDatasetKey].summary;
+      const nodes = document.querySelectorAll("#graph-viewport svg .node");
+      nodes.forEach(node => {
+        node.style.cursor = "pointer";
+        node.addEventListener("click", () => {
+          const id = node.id.replace(/^flowchart-/, '').split('-')[0];
+          for (const [file, data] of Object.entries(summary)) {
+            if (data.id === id || node.id.includes(data.id)) {
+              inspectModule(file);
+              break;
+            }
+          }
+        });
+      });
+    }
+
+    function inspectModule(file) {
+      const summary = DATASETS[currentDatasetKey].summary;
+      const data = summary[file];
+      if (!data) return;
+
+      document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
+      const selItem = document.getElementById(`mod-item-${data.id}`);
+      if (selItem) {
+        selItem.classList.add("selected");
+        selItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      document.getElementById("insp-file").innerText = file;
+      document.getElementById("insp-layer").innerText = data.layer;
+      document.getElementById("insp-doc").innerText = data.docstring || "No module docstring specified.";
+      document.getElementById("insp-loc").innerText = data.loc || 0;
+      document.getElementById("insp-complexity").innerText = data.complexity || 1;
+
+      const clsContainer = document.getElementById("insp-classes");
+      if (data.classes && data.classes.length > 0) {
+        document.getElementById("insp-classes-section").style.display = "block";
+        clsContainer.innerHTML = data.classes.map(c => `<span class="symbol-pill">class ${c}</span>`).join("");
+      } else {
+        document.getElementById("insp-classes-section").style.display = "none";
+      }
+
+      const fnContainer = document.getElementById("insp-functions");
+      if (data.functions && data.functions.length > 0) {
+        document.getElementById("insp-functions-section").style.display = "block";
+        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">def ${f}()</span>`).join("");
+      } else {
+        document.getElementById("insp-functions-section").style.display = "none";
+      }
+
+      const depsContainer = document.getElementById("insp-deps");
+      if (data.internal_dependencies && data.internal_dependencies.length > 0) {
+        depsContainer.innerHTML = data.internal_dependencies.map(d => `
+          <div class="dep-link" onclick="inspectModule('${d}')">
+            <span>↳ ${d}</span>
+            <span style="color:var(--accent);">inspect &rarr;</span>
+          </div>
+        `).join("");
+      } else {
+        depsContainer.innerHTML = `<span style="font-size:12px; color:var(--text-faint);">No internal dependencies (Standalone)</span>`;
+      }
+
+      const impByContainer = document.getElementById("insp-imported-by");
+      if (data.imported_by && data.imported_by.length > 0) {
+        impByContainer.innerHTML = data.imported_by.map(ib => `
+          <div class="dep-link" onclick="inspectModule('${ib}')">
+            <span>↲ ${ib}</span>
+            <span style="color:var(--emerald);">imported by &rarr;</span>
+          </div>
+        `).join("");
+      } else {
+        impByContainer.innerHTML = `<span style="font-size:12px; color:var(--text-faint);">Not imported by internal files</span>`;
+      }
+
+      document.getElementById("inspector-drawer").classList.add("open");
+    }
+
+    function closeInspector() {
+      document.getElementById("inspector-drawer").classList.remove("open");
+      document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
+    }
+
+    function filterByLayer(layer) {
+      document.querySelectorAll(".layer-chip").forEach(c => {
+        c.classList.toggle("active", c.innerText === layer || (layer === 'ALL' && c.innerText === 'All'));
+      });
+
+      const summary = DATASETS[currentDatasetKey].summary;
+      for (const [file, data] of Object.entries(summary)) {
+        const item = document.getElementById(`mod-item-${data.id}`);
+        if (!item) continue;
+        item.style.display = (layer === "ALL" || data.layer === layer) ? "block" : "none";
+      }
+    }
+
+    function handleSearch(query) {
+      const q = query.toLowerCase().trim();
+      const summary = DATASETS[currentDatasetKey].summary;
+      for (const [file, data] of Object.entries(summary)) {
+        const item = document.getElementById(`mod-item-${data.id}`);
+        if (!item) continue;
+        const matches = file.toLowerCase().includes(q) ||
+          (data.classes && data.classes.some(c => c.toLowerCase().includes(q))) ||
+          (data.functions && data.functions.some(f => f.toLowerCase().includes(q))) ||
+          (data.layer && data.layer.toLowerCase().includes(q));
+        item.style.display = matches ? "block" : "none";
+      }
+    }
+
+    function toggleOrientation() {
+      currentOrientation = currentOrientation === "TD" ? "LR" : "TD";
+      showToast(`Orientation switched to: ${currentOrientation === "TD" ? "Top-Down" : "Left-to-Right"}`);
+      renderCurrentDataset();
+    }
+
+    function switchDataset(key) {
+      currentDatasetKey = key;
+      closeInspector();
+      renderCurrentDataset();
+      showToast(`Loaded: ${DATASETS[key].name}`);
+    }
+
+    function zoomIn() { if (panZoomInstance) panZoomInstance.zoomIn(); }
+    function zoomOut() { if (panZoomInstance) panZoomInstance.zoomOut(); }
+    function resetZoom() { if (panZoomInstance) { panZoomInstance.reset(); panZoomInstance.center(); } }
+    function fitDiagram() { if (panZoomInstance) { panZoomInstance.fit(); panZoomInstance.center(); } }
+
+    function populateSlothModal(summary) {
+      const entryPoints = Object.entries(summary).filter(([_, d]) => d.has_entry_point).map(([f]) => f);
+      const coreFiles = Object.entries(summary).filter(([_, d]) => d.layer && (d.layer.includes("Core") || d.layer.includes("Domain"))).map(([f]) => f);
+      const apiFiles = Object.entries(summary).filter(([_, d]) => d.layer && (d.layer.includes("API") || d.layer.includes("Interface"))).map(([f]) => f);
+
+      document.getElementById("sloth-entry-text").innerText = entryPoints.length 
+        ? `Start execution at: ${entryPoints.join(", ")}. This is where CLI/Server initialization takes place.`
+        : `No explicit entry point found. Inspect top-level files.`;
+
+      document.getElementById("sloth-core-text").innerText = coreFiles.length 
+        ? `The heart of the application logic is in: ${coreFiles.join(", ")}. Inspect these to understand domain logic.`
+        : `Domain logic is distributed among internal modules. Inspect dependencies in the center graph.`;
+
+      document.getElementById("sloth-api-text").innerText = apiFiles.length
+        ? `External endpoints and interfaces are in: ${apiFiles.join(", ")}.`
+        : `Internal pipeline/library without separate HTTP endpoints.`;
+    }
+
+    function openSlothModal() { document.getElementById("sloth-modal").classList.add("active"); }
+    function closeSlothModal() { document.getElementById("sloth-modal").classList.remove("active"); }
+    function closeSlothModalOnOut(e) { if (e.target.id === "sloth-modal") closeSlothModal(); }
+
+    function openDeployModal() { document.getElementById("deploy-modal").classList.add("active"); }
+    function closeDeployModal() { document.getElementById("deploy-modal").classList.remove("active"); }
+    function closeDeployModalOnOut(e) { if (e.target.id === "deploy-modal") closeDeployModal(); }
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2800);
+    }
+
+    function copyMermaid() {
+      navigator.clipboard.writeText(currentMermaidCode).then(() => {
+        showToast("✅ Mermaid code copied to clipboard!");
+      }).catch(() => {
+        showToast("⚠️ Could not access clipboard");
+      });
+    }
+
+    function downloadMarkdown() {
+      const repoName = DATASETS[currentDatasetKey].name;
+      const ticks = "```";
+      const content = `# Architecture Overview: ${repoName}\n\n${ticks}mermaid\n${currentMermaidCode}\n${ticks}\n`;
+      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ARCHITECTURE.md";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("📥 ARCHITECTURE.md downloaded!");
+    }
+
+    // --- CLIENT-SIDE PYTHON PARSER FOR FOLDER DRAG & DROP ON GITHUB PAGES ---
+    function triggerFolderSelect() {
+      document.getElementById("folder-picker").click();
+    }
+
+    function parsePythonCodeClientSide(filename, content) {
+      const lines = content.split('\n');
+      const classes = [];
+      const functions = [];
+      const imports = [];
+      let docstring = "";
+      let hasMain = false;
+      let complexity = 1;
+
+      // Docstring detection
+      const docMatch = content.match(/^"""([\s\S]*?)"""|^'''([\s\S]*?)'''/);
+      if (docMatch) {
+        docstring = (docMatch[1] || docMatch[2] || "").trim().split('\n')[0].slice(0, 140);
+      }
+
+      for (let line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || !trimmed) continue;
+
+        // Class def
+        const clsMatch = trimmed.match(/^class\s+([a-zA-Z0-9_]+)/);
+        if (clsMatch) {
+          classes.push(clsMatch[1]);
+          complexity += 2;
+        }
+
+        // Function def
+        const fnMatch = trimmed.match(/^(?:async\s+)?def\s+([a-zA-Z0-9_]+)/);
+        if (fnMatch && !fnMatch[1].startsWith('_')) {
+          functions.push(fnMatch[1]);
+          complexity += 1;
+        }
+
+        // Branching / complexity
+        if (trimmed.startsWith('if ') || trimmed.startsWith('elif ') || trimmed.startsWith('for ') || trimmed.startsWith('while ')) {
+          complexity += 1;
+        }
+
+        // Entry point
+        if (trimmed.includes('__name__') && trimmed.includes('__main__')) {
+          hasMain = true;
+        }
+
+        // Imports
+        const impMatch = trimmed.match(/^import\s+([a-zA-Z0-9_., ]+)/);
+        if (impMatch) {
+          impMatch[1].split(',').forEach(i => imports.push(i.trim().split('.')[0]));
+        }
+
+        const fromMatch = trimmed.match(/^from\s+([a-zA-Z0-9_.]+)\s+import/);
+        if (fromMatch) {
+          imports.push(fromMatch[1].split('.')[0]);
+        }
+      }
+
+      // Classify Layer
+      const lower = filename.toLowerCase();
+      let layer = "Domain Services";
+      if (/route|controller|api|endpoint|handler|view|server/.test(lower)) layer = "API & Interface";
+      else if (/model|schema|entity|dto|database|db|repository|crud/.test(lower)) layer = "Data & Storage";
+      else if (/core|engine|service|logic|domain|pipeline|manager/.test(lower)) layer = "Core & Domain";
+      else if (/util|helper|common|tool|shared|lib/.test(lower)) layer = "Utilities & Shared";
+      else if (/config|setting|env|constant/.test(lower)) layer = "Configuration";
+      else if (hasMain || /main\.py$|app\.py$|cli\.py$|run\.py$/.test(lower)) layer = "Application Entry";
+
+      return {
+        id: sanitizeId(filename),
+        file: filename,
+        layer: layer,
+        docstring: docstring || "Python module",
+        classes: classes,
+        class_details: {},
+        functions: functions.slice(0, 8),
+        all_functions_count: functions.length,
+        raw_imports: Array.from(new Set(imports)),
+        internal_dependencies: [],
+        has_entry_point: hasMain || /main\.py$|app\.py$|cli\.py$/.test(lower),
+        loc: lines.length,
+        complexity: Math.min(complexity, 100),
+        imported_by: []
+      };
+    }
+
+    async function handleFolderSelect(files) {
+      if (!files || files.length === 0) return;
+      showToast("⚡ Parsing Python repository in-browser...");
+
+      const pyFiles = Array.from(files).filter(f => f.name.endsWith('.py') && !f.webkitRelativePath.includes('.git') && !f.webkitRelativePath.includes('node_modules') && !f.webkitRelativePath.includes('venv'));
+      if (pyFiles.length === 0) {
+        showToast("⚠️ No Python files found in chosen folder.");
+        return;
+      }
+
+      const summary = {};
+      const localModules = new Set();
+      const moduleToFile = {};
+
+      for (const file of pyFiles) {
+        const path = file.webkitRelativePath || file.name;
+        // Strip top folder name
+        const parts = path.split('/');
+        const relPath = parts.length > 1 ? parts.slice(1).join('/') : path;
+        const modName = relPath.replace(/\.py$/, '').replace(/\//g, '.');
+        const shortName = modName.split('.').pop();
+
+        localModules.add(modName);
+        localModules.add(shortName);
+        moduleToFile[modName] = relPath;
+        moduleToFile[shortName] = relPath;
+      }
+
+      for (const file of pyFiles) {
+        const path = file.webkitRelativePath || file.name;
+        const parts = path.split('/');
+        const relPath = parts.length > 1 ? parts.slice(1).join('/') : path;
+
+        const text = await file.text();
+        const parsed = parsePythonCodeClientSide(relPath, text);
+        summary[relPath] = parsed;
+      }
+
+      // Resolve internal dependencies
+      for (const [relPath, data] of Object.entries(summary)) {
+        const deps = new Set();
+        for (const imp of data.raw_imports) {
+          if (moduleToFile[imp] && moduleToFile[imp] !== relPath) {
+            deps.add(moduleToFile[imp]);
+          }
+        }
+        data.internal_dependencies = Array.from(deps);
+      }
+
+      // Compute imported_by
+      for (const [file, data] of Object.entries(summary)) {
+        for (const dep of data.internal_dependencies) {
+          if (summary[dep] && !summary[dep].imported_by.includes(file)) {
+            summary[dep].imported_by.push(file);
+          }
+        }
+      }
+
+      const repoTitle = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : "Uploaded Repository";
+      DATASETS["uploaded_repo"] = {
+        name: repoTitle,
+        summary: summary
+      };
+
+      // Add to select
+      const select = document.getElementById("dataset-switcher");
+      let uploadedOpt = document.getElementById("uploaded-option");
+      if (!uploadedOpt) {
+        uploadedOpt = document.createElement("option");
+        uploadedOpt.id = "uploaded-option";
+        select.appendChild(uploadedOpt);
+      }
+      uploadedOpt.value = "uploaded_repo";
+      uploadedOpt.innerText = `📂 ${repoTitle} (${Object.keys(summary).length} modules)`;
+      select.value = "uploaded_repo";
+
+      switchDataset("uploaded_repo");
+      showToast(`🎉 Successfully parsed ${Object.keys(summary).length} Python modules!`);
+    }
+
+    // Drag and drop handlers
+    const dropArea = document.body;
+    const dropOverlay = document.getElementById("drop-overlay");
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropArea.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropOverlay.classList.add('dragover');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropArea.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropOverlay.classList.remove('dragover');
+      }, false);
+    });
+
+    dropArea.addEventListener('drop', async (e) => {
+      const items = e.dataTransfer.items;
+      if (items && items.length > 0) {
+        const files = [];
+        async function traverseFileTree(item, path = '') {
+          if (item.isFile) {
+            const file = await new Promise((resolve) => item.file(resolve));
+            file.webkitRelativePath = path + file.name;
+            files.push(file);
+          } else if (item.isDirectory) {
+            const dirReader = item.createReader();
+            const entries = await new Promise((resolve) => dirReader.readEntries(resolve));
+            for (const entry of entries) {
+              await traverseFileTree(entry, path + item.name + '/');
+            }
+          }
+        }
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i].webkitGetAsEntry();
+          if (item) {
+            await traverseFileTree(item);
+          }
+        }
+
+        if (files.length > 0) {
+          handleFolderSelect(files);
+        }
+      }
+    });
+
+    // Startup
+    renderCurrentDataset();
+  </script>
+</body>
+</html>
