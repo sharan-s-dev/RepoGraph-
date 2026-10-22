@@ -182,6 +182,16 @@ class TestScanDemoProject(unittest.TestCase):
         self.assertIn("app.py", summary)
         self.assertIn("api/routes.py", summary["app.py"]["internal_dependencies"])
 
+    def test_empty_init_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir)
+            (p / "pkg").mkdir()
+            (p / "pkg" / "__init__.py").write_text("")
+            (p / "pkg" / "real.py").write_text("def hello(): pass")
+            summary = scan_repository(p)
+            self.assertIn("pkg/real.py", summary)
+            self.assertNotIn("pkg/__init__.py", summary)
+
 
 class TestMermaidGeneration(unittest.TestCase):
     def test_mermaid_syntax(self):

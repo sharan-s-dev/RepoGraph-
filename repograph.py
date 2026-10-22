@@ -404,7 +404,8 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
                 "complexity": min(visitor.complexity_score, 100),
                 "imported_by": []
             }
-        except Exception:
+        except Exception as e:
+            print(f"      [!] Warning: Could not parse {rel_posix}: {e}")
             continue
 
     # Second pass: resolve dependencies
@@ -438,6 +439,18 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
         for dep in data["internal_dependencies"]:
             if dep in codebase_summary and file not in codebase_summary[dep]["imported_by"]:
                 codebase_summary[dep]["imported_by"].append(file)
+
+    # Omit empty, unreferenced __init__.py files that carry no classes, functions, or dependencies
+    empty_inits = [
+        f for f, d in codebase_summary.items()
+        if f.endswith("__init__.py")
+        and not d["classes"]
+        and not d["functions"]
+        and not d["internal_dependencies"]
+        and not d["imported_by"]
+    ]
+    for f in empty_inits:
+        del codebase_summary[f]
 
     return codebase_summary
 
