@@ -50,3 +50,8 @@ htmlcov/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Test & build output
+_site/
+output_*/
+*.egg-info/

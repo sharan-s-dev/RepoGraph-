@@ -6,6 +6,7 @@ Zero third-party pip dependencies required.
 """
 
 import ast
+import argparse
 import json
 import os
 import re
@@ -15,6 +16,8 @@ import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any, Optional
+
+__version__ = "1.0.0"
 
 # Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
@@ -26,11 +29,25 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-IGNORED_DIRS = {
-    ".git", "__pycache__", "venv", ".venv", "env", "node_modules", 
-    "dist", "build", ".idea", ".vscode", ".pytest_cache", "tests",
-    ".eggs", "*.egg-info", ".mypy_cache", ".ruff_cache", "coverage"
+# Standard library modules set for classification
+STDLIB_MODULES: Set[str] = set(sys.stdlib_module_names) if hasattr(sys, "stdlib_module_names") else {
+    "abc", "argparse", "array", "ast", "asyncio", "base64", "collections", "concurrent",
+    "contextlib", "copy", "csv", "ctypes", "dataclasses", "datetime", "decimal", "difflib",
+    "dis", "enum", "errno", "fnmatch", "fractions", "functools", "gc", "glob", "gzip",
+    "hashlib", "heapq", "hmac", "html", "http", "importlib", "inspect", "io", "itertools",
+    "json", "logging", "math", "mimetypes", "multiprocessing", "operator", "os", "pathlib",
+    "pickle", "platform", "pprint", "queue", "random", "re", "secrets", "select", "shutil",
+    "signal", "socket", "sqlite3", "ssl", "stat", "string", "struct", "subprocess", "sys",
+    "tempfile", "threading", "time", "traceback", "types", "typing", "unittest", "urllib",
+    "uuid", "warnings", "weakref", "xml", "zipfile", "zlib"
 }
+
+IGNORED_DIRS: Set[str] = {
+    ".git", "__pycache__", "venv", ".venv", "env", "node_modules",
+    "dist", "build", ".idea", ".vscode", ".pytest_cache", "tests",
+    ".eggs", "*.egg-info", ".mypy_cache", ".ruff_cache", "coverage", ".tox"
+}
+
 
 def sanitize_id(name: str) -> str:
     """Mermaid node IDs must strictly be alphanumeric and underscores."""
@@ -39,25 +56,15 @@ def sanitize_id(name: str) -> str:
         cleaned = f"n_{cleaned}"
     return cleaned or "node_root"
 
-def resolve_repo_name(target_path: Path) -> str:
-    """Intelligently determine a clean, professional project name."""
-    try:
-        res = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            cwd=str(target_path),
-            capture_output=True,
-            text=True,
-            timeout=2
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            url = res.stdout.strip()
-            name = url.split("/")[-1].replace(".git", "").strip()
-            clean_name = re.sub(r'[-_]+$', '', name)
-            if clean_name and clean_name.lower() not in ["dev", "dev 4", "code"]:
-                return clean_name
-    except Exception:
-        pass
 
+def resolve_repo_name(target_path: Path, custom_name: Optional[str] = None) -> str:
+    """Intelligently determine a clean, professional project name."""
+    if custom_name and custom_name.strip():
+        return custom_name.strip()
+
+    target_path = target_path.resolve()
+
+    # 1. Check pyproject.toml / setup.cfg in target_path
     for config_file in ["pyproject.toml", "setup.cfg", "package.json"]:
         p = target_path / config_file
         if p.exists():
@@ -70,70 +77,96 @@ def resolve_repo_name(target_path: Path) -> str:
             except Exception:
                 pass
 
-    dir_name = target_path.name
-    generic_names = {".", "dev", "dev 4", "src", "app", "code", "repo", "test", "demo"}
-    if dir_name.lower() in generic_names or dir_name.isdigit():
-        return "RepoGraph"
+    # 2. Check if target_path is itself a git repository root
+    if (target_path / ".git").exists():
+        try:
+            res = subprocess.run(
+                ["git", "config", "--get", "remote.origin.url"],
+                cwd=str(target_path),
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                url = res.stdout.strip()
+                name = url.split("/")[-1].replace(".git", "").strip()
+                clean_name = re.sub(r'[-_]+$', '', name)
+                if clean_name and clean_name.lower() not in ["dev", "dev 4", "code"]:
+                    return clean_name
+        except Exception:
+            pass
 
-    clean_dir = re.sub(r'[-_]+$', '', dir_name)
-    return clean_dir or "RepoGraph"
+    # 3. Use directory name
+    dir_name = target_path.name
+    if dir_name and dir_name != ".":
+        clean = re.sub(r'[-_]+$', '', dir_name)
+        if clean:
+            return clean
+
+    return "RepoGraph"
+
 
 class CodebaseVisitor(ast.NodeVisitor):
     def __init__(self, file_path: Path, repo_root: Path):
         self.file_path = file_path
         self.repo_root = repo_root
-        self.classes = []
-        self.class_details = {}
-        self.functions = []
-        self.raw_imports = []
-        self.docstring = ""
-        self.has_main = False
-        self.complexity_score = 1
+        self.classes: List[str] = []
+        self.class_details: Dict[str, Dict[str, Any]] = {}
+        self.functions: List[str] = []
+        self.raw_imports: List[Tuple[str, Optional[str], int]] = []
+        self.docstring: str = ""
+        self.full_docstring: str = ""
+        self.has_main: bool = False
+        self.complexity_score: int = 1
 
-    def visit_Module(self, node):
+    def visit_Module(self, node: ast.Module):
         doc = ast.get_docstring(node)
         if doc:
-            self.docstring = doc.strip().split("\n")[0][:140]
+            self.full_docstring = doc.strip()
+            self.docstring = self.full_docstring.split("\n")[0][:140]
         self.generic_visit(node)
 
-    def visit_ClassDef(self, node):
+    def visit_ClassDef(self, node: ast.ClassDef):
         self.classes.append(node.name)
         methods = []
         for item in node.body:
             if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not item.name.startswith("__"):
                     args_list = [a.arg for a in item.args.args if a.arg != "self"]
-                    methods.append(f"{item.name}({', '.join(args_list[:3])})")
-        
+                    is_async = "async " if isinstance(item, ast.AsyncFunctionDef) else ""
+                    methods.append(f"{is_async}{item.name}({', '.join(args_list[:3])})")
+
         bases = []
         for b in node.bases:
             if isinstance(b, ast.Name):
                 bases.append(b.id)
             elif isinstance(b, ast.Attribute):
-                bases.append(b.attr)
+                bases.append(f"{getattr(b.value, 'id', '')}.{b.attr}".lstrip("."))
 
+        class_doc = ast.get_docstring(node) or ""
         self.class_details[node.name] = {
-            "methods": methods[:6],
-            "bases": bases
+            "methods": methods[:8],
+            "bases": bases,
+            "docstring": class_doc.split("\n")[0][:100] if class_doc else ""
         }
         self.complexity_score += 2
         self.generic_visit(node)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef):
         if not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
             self.functions.append(f"{node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node):
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
         if not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
             self.functions.append(f"async {node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
         self.generic_visit(node)
 
-    def visit_If(self, node):
+    def visit_If(self, node: ast.If):
         if isinstance(node.test, ast.Compare):
             left = getattr(node.test.left, "id", None)
             if left == "__name__":
@@ -141,25 +174,43 @@ class CodebaseVisitor(ast.NodeVisitor):
         self.complexity_score += 1
         self.generic_visit(node)
 
-    def visit_For(self, node):
+    def visit_For(self, node: ast.For):
         self.complexity_score += 1
         self.generic_visit(node)
 
-    def visit_While(self, node):
+    def visit_AsyncFor(self, node: ast.AsyncFor):
         self.complexity_score += 1
         self.generic_visit(node)
 
-    def visit_Import(self, node):
+    def visit_While(self, node: ast.While):
+        self.complexity_score += 1
+        self.generic_visit(node)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler):
+        self.complexity_score += 1
+        self.generic_visit(node)
+
+    def visit_With(self, node: ast.With):
+        self.complexity_score += 1
+        self.generic_visit(node)
+
+    def visit_BoolOp(self, node: ast.BoolOp):
+        self.complexity_score += len(node.values) - 1
+        self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import):
         for alias in node.names:
             self.raw_imports.append((alias.name, None, 0))
 
-    def visit_ImportFrom(self, node):
+    def visit_ImportFrom(self, node: ast.ImportFrom):
         level = node.level or 0
         mod = node.module or ""
         for alias in node.names:
             self.raw_imports.append((mod, alias.name, level))
 
+
 def classify_layer(rel_path: str, visitor: CodebaseVisitor) -> str:
+    """Classifies a Python module into an architectural layer."""
     lower = rel_path.lower()
     if any(k in lower for k in ["route", "controller", "api", "endpoint", "handler", "view", "server"]):
         return "API & Interface"
@@ -175,6 +226,7 @@ def classify_layer(rel_path: str, visitor: CodebaseVisitor) -> str:
         return "Application Entry"
     return "Domain Services"
 
+
 def count_file_lines(path: Path) -> int:
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
@@ -182,66 +234,145 @@ def count_file_lines(path: Path) -> int:
     except Exception:
         return 0
 
-def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
-    cycles = []
-    visited = set()
-    rec_stack = set()
-    current_path = []
 
-    def dfs(node):
-        visited.add(node)
+def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
+    """Detects cycles in the internal dependency graph and deduplicates them."""
+    cycles: List[List[str]] = []
+    seen_canonical: Set[Tuple[str, ...]] = set()
+
+    def dfs(node: str, path: List[str], rec_stack: Set[str]):
         rec_stack.add(node)
-        current_path.append(node)
+        path.append(node)
 
         deps = summary.get(node, {}).get("internal_dependencies", [])
         for dep in deps:
-            if dep not in visited:
-                dfs(dep)
-            elif dep in rec_stack:
-                cycle_start = current_path.index(dep)
-                cycle = current_path[cycle_start:] + [dep]
-                if cycle not in cycles and len(cycle) > 2:
-                    cycles.append(cycle)
+            if dep not in summary:
+                continue
+            if dep in rec_stack:
+                cycle_start = path.index(dep)
+                cycle = path[cycle_start:] + [dep]
+                core = cycle[:-1]
+                if len(core) >= 2:
+                    min_idx = core.index(min(core))
+                    canonical = tuple(core[min_idx:] + core[:min_idx])
+                    if canonical not in seen_canonical:
+                        seen_canonical.add(canonical)
+                        cycles.append(cycle)
+            elif dep not in path:
+                dfs(dep, path, rec_stack)
 
-        current_path.pop()
+        path.pop()
         rec_stack.remove(node)
 
-    for mod in summary:
-        if mod not in visited:
-            dfs(mod)
+    for mod in sorted(summary.keys()):
+        dfs(mod, [], set())
 
-    return cycles[:5]
+    return cycles[:10]
 
-def scan_repository(repo_path: Path) -> Dict[str, Any]:
+
+def resolve_import_target(
+    importer_rel_posix: str,
+    mod_name: str,
+    item_name: Optional[str],
+    level: int,
+    all_py_files: Set[str]
+) -> Tuple[Optional[str], Optional[Tuple[str, str]]]:
+    """
+    Deterministically resolves an import statement to either:
+    1. An internal repository file path (relative posix)
+    2. An external / stdlib package descriptor
+    """
+    mod_path = mod_name.replace(".", "/") if mod_name else ""
+    importer_p = Path(importer_rel_posix)
+    candidates: List[Path] = []
+
+    if level > 0:
+        # Relative import
+        curr = importer_p.parent
+        for _ in range(level - 1):
+            curr = curr.parent
+        base = curr / mod_path if mod_path else curr
+        candidates.extend([
+            base.with_suffix(".py"),
+            base / "__init__.py"
+        ])
+        if item_name:
+            candidates.extend([
+                (base / item_name).with_suffix(".py"),
+                base / item_name / "__init__.py"
+            ])
+    else:
+        # Absolute import - check potential source roots
+        roots: List[Path] = []
+        curr = importer_p.parent
+        while curr != Path("."):
+            roots.append(curr)
+            curr = curr.parent
+        roots.append(Path("."))
+
+        for r in roots:
+            base = r / mod_path if mod_path else r
+            candidates.extend([
+                base.with_suffix(".py"),
+                base / "__init__.py"
+            ])
+            if item_name:
+                candidates.extend([
+                    (base / item_name).with_suffix(".py"),
+                    base / item_name / "__init__.py"
+                ])
+
+    for c in candidates:
+        posix_c = c.as_posix()
+        if posix_c in all_py_files and posix_c != importer_rel_posix:
+            return posix_c, None
+
+    # Suffix fallback: matches packages inside subdirectories (e.g., src/pkg/mod)
+    if mod_path:
+        suffix = "/" + mod_path + ".py"
+        matches = [f for f in all_py_files if (f.endswith(suffix) or f == mod_path + ".py") and f != importer_rel_posix]
+        if matches:
+            # Rank matches by proximity to importer directory
+            matches.sort(key=lambda m: len(set(Path(m).parts) & set(importer_p.parts)), reverse=True)
+            return matches[0], None
+
+        if item_name:
+            suffix_item = f"/{mod_path}/{item_name}.py"
+            matches_item = [f for f in all_py_files if (f.endswith(suffix_item) or f == f"{mod_path}/{item_name}.py") and f != importer_rel_posix]
+            if matches_item:
+                matches_item.sort(key=lambda m: len(set(Path(m).parts) & set(importer_p.parts)), reverse=True)
+                return matches_item[0], None
+
+    # External or stdlib package classification
+    if level == 0 and mod_name:
+        top_pkg = mod_name.split(".")[0]
+        if top_pkg:
+            pkg_type = "stdlib" if top_pkg in STDLIB_MODULES else "third_party"
+            return None, (top_pkg, pkg_type)
+
+    return None, None
+
+
+def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None) -> Dict[str, Any]:
     repo_path = repo_path.resolve()
     codebase_summary: Dict[str, Any] = {}
-    module_to_file: Dict[str, str] = {}
+    excludes = set(IGNORED_DIRS)
+    if extra_excludes:
+        excludes.update(extra_excludes)
 
     py_files: List[Path] = []
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+        dirs[:] = [d for d in dirs if d not in excludes and not d.startswith(".")]
         for file in files:
             if file.endswith(".py"):
-                py_files.append(Path(root) / file)
+                full_p = Path(root) / file
+                rel_parts = full_p.relative_to(repo_path).parts
+                if not any(ex in rel_parts for ex in excludes):
+                    py_files.append(full_p)
 
-    for p in py_files:
-        rel = p.relative_to(repo_path)
-        rel_posix = rel.as_posix()
-        rel_no_ext = rel.with_suffix("")
-        mod_name = rel_no_ext.as_posix().replace("/", ".")
-        short_name = mod_name.split(".")[-1]
-        
-        module_to_file[mod_name] = rel_posix
-        module_to_file[short_name] = rel_posix
-
-        if p.name == "__init__.py":
-            pkg_path = p.parent.relative_to(repo_path)
-            pkg_mod = pkg_path.as_posix().replace("/", ".")
-            if pkg_mod and pkg_mod != ".":
-                module_to_file[pkg_mod] = rel_posix
-                module_to_file[pkg_mod.split(".")[-1]] = rel_posix
-
+    all_py_files: Set[str] = {p.relative_to(repo_path).as_posix() for p in py_files}
     visitors: Dict[str, CodebaseVisitor] = {}
+
     for p in py_files:
         rel_posix = p.relative_to(repo_path).as_posix()
         loc = count_file_lines(p)
@@ -260,11 +391,14 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
                 "file": rel_posix,
                 "layer": layer,
                 "docstring": visitor.docstring or "Python module",
+                "full_docstring": visitor.full_docstring or visitor.docstring or "Python module",
                 "classes": visitor.classes,
                 "class_details": visitor.class_details,
-                "functions": visitor.functions[:8],
+                "functions": visitor.functions[:10],
                 "all_functions_count": len(visitor.functions),
                 "internal_dependencies": [],
+                "external_dependencies": [],
+                "stdlib_dependencies": [],
                 "has_entry_point": visitor.has_main or rel_posix.endswith(("main.py", "app.py", "cli.py")),
                 "loc": loc,
                 "complexity": min(visitor.complexity_score, 100),
@@ -273,61 +407,40 @@ def scan_repository(repo_path: Path) -> Dict[str, Any]:
         except Exception:
             continue
 
-    for p in py_files:
-        rel_posix = p.relative_to(repo_path).as_posix()
+    # Second pass: resolve dependencies
+    for rel_posix, visitor in visitors.items():
         if rel_posix not in codebase_summary:
             continue
 
-        visitor = visitors.get(rel_posix)
-        if not visitor:
-            continue
-
-        internal_deps = set()
-        file_parent = p.parent.relative_to(repo_path)
+        internal_deps: Set[str] = set()
+        external_deps: Set[str] = set()
+        stdlib_deps: Set[str] = set()
 
         for mod_name, item_name, level in visitor.raw_imports:
-            if level > 0:
-                curr_dir = file_parent
-                for _ in range(level - 1):
-                    curr_dir = curr_dir.parent
-                
-                prefix = curr_dir.as_posix().replace("/", ".")
-                target_candidates = []
-                if mod_name:
-                    full_mod = f"{prefix}.{mod_name}" if prefix and prefix != "." else mod_name
-                    target_candidates.append(full_mod)
-                    if item_name:
-                        target_candidates.append(f"{full_mod}.{item_name}")
-                elif item_name:
-                    full_item = f"{prefix}.{item_name}" if prefix and prefix != "." else item_name
-                    target_candidates.append(full_item)
-                    target_candidates.append(item_name)
-
-                for cand in target_candidates:
-                    if cand in module_to_file and module_to_file[cand] != rel_posix:
-                        internal_deps.add(module_to_file[cand])
-            else:
-                candidates = []
-                if mod_name:
-                    candidates.append(mod_name)
-                    candidates.append(mod_name.split(".")[0])
-                    if item_name:
-                        candidates.append(f"{mod_name}.{item_name}")
-                elif item_name:
-                    candidates.append(item_name)
-
-                for cand in candidates:
-                    if cand in module_to_file and module_to_file[cand] != rel_posix:
-                        internal_deps.add(module_to_file[cand])
+            internal_target, ext_info = resolve_import_target(
+                rel_posix, mod_name, item_name, level, all_py_files
+            )
+            if internal_target:
+                internal_deps.add(internal_target)
+            elif ext_info:
+                pkg_name, pkg_type = ext_info
+                if pkg_type == "stdlib":
+                    stdlib_deps.add(pkg_name)
+                else:
+                    external_deps.add(pkg_name)
 
         codebase_summary[rel_posix]["internal_dependencies"] = sorted(list(internal_deps))
+        codebase_summary[rel_posix]["external_dependencies"] = sorted(list(external_deps))
+        codebase_summary[rel_posix]["stdlib_dependencies"] = sorted(list(stdlib_deps))
 
+    # Third pass: compute imported_by
     for file, data in codebase_summary.items():
         for dep in data["internal_dependencies"]:
             if dep in codebase_summary and file not in codebase_summary[dep]["imported_by"]:
                 codebase_summary[dep]["imported_by"].append(file)
 
     return codebase_summary
+
 
 def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "TD") -> str:
     lines = [
@@ -366,7 +479,7 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
             elif data["functions"]:
                 clean_funcs = [f.split('(')[0] for f in data["functions"][:2]]
                 label_parts.append(f"{', '.join(clean_funcs)}")
-            
+
             clean_label = " | ".join(label_parts).replace('"', "'")
             style_class = layer_styles.get(layer_name, "defaultNode")
             if data.get("has_entry_point"):
@@ -389,29 +502,19 @@ def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "
 
     return "\n".join(lines)
 
-def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary: Dict[str, Any]) -> str:
-    summary_json = json.dumps(summary, indent=None)
-    cycles = detect_circular_dependencies(summary)
-    cycles_json = json.dumps(cycles)
-    
-    total_files = len(summary)
-    total_classes = sum(len(d["classes"]) for d in summary.values())
-    total_functions = sum(d["all_functions_count"] for d in summary.values())
-    total_loc = sum(d["loc"] for d in summary.values())
-    total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
 
-    return f"""<!DOCTYPE html>
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RepoGraph - {repo_name} | Codebase Architecture Explorer</title>
+  <title>RepoGraph - __REPO_NAME__ | Codebase Architecture Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
-    :root {{
+    :root {
       --bg-base: #06080e;
       --bg-surface: #0c111d;
       --bg-surface-elevated: #12192c;
@@ -425,14 +528,15 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       --emerald: #10b981;
       --emerald-glow: rgba(16, 185, 129, 0.25);
       --amber: #f59e0b;
+      --crimson: #ef4444;
       --indigo: #818cf8;
       --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
-    }}
+    }
 
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {{
+    body {
       background-color: var(--bg-base);
       color: var(--text-main);
       font-family: var(--font-ui);
@@ -440,9 +544,9 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       overflow: hidden;
       display: flex;
       flex-direction: column;
-    }}
+    }
 
-    header.top-nav {{
+    header.top-nav {
       height: 56px;
       background: rgba(12, 17, 29, 0.95);
       backdrop-filter: blur(16px);
@@ -453,15 +557,15 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       padding: 0 18px;
       z-index: 50;
       flex-shrink: 0;
-    }}
+    }
 
-    .brand-group {{
+    .brand-group {
       display: flex;
       align-items: center;
       gap: 12px;
-    }}
+    }
 
-    .logo-badge {{
+    .logo-badge {
       width: 32px;
       height: 32px;
       border-radius: 8px;
@@ -473,29 +577,29 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       font-size: 14px;
       color: #ffffff;
       box-shadow: 0 0 14px var(--accent-glow);
-    }}
+    }
 
-    .title-group h1 {{
+    .title-group h1 {
       font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.2px;
       display: flex;
       align-items: center;
       gap: 8px;
-    }}
+    }
 
-    .title-group p {{
+    .title-group p {
       font-size: 11px;
       color: var(--text-muted);
-    }}
+    }
 
-    .nav-actions {{
+    .nav-actions {
       display: flex;
       align-items: center;
       gap: 8px;
-    }}
+    }
 
-    .status-pill {{
+    .status-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -506,17 +610,47 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       font-family: var(--font-mono);
       background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border);
-    }}
+    }
 
-    .status-dot {{
+    .status-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: var(--emerald);
       box-shadow: 0 0 8px var(--emerald);
-    }}
+    }
 
-    .btn {{
+    .cycle-pill-nav {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      transition: all 0.2s ease;
+    }
+
+    .cycle-pill-warn {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+    .cycle-pill-warn:hover {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: #ef4444;
+      color: #ffffff;
+    }
+
+    .cycle-pill-ok {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+
+    .btn {
       background: var(--bg-surface-elevated);
       color: var(--text-main);
       border: 1px solid var(--border);
@@ -531,35 +665,35 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       gap: 6px;
       transition: all 0.15s ease;
       text-decoration: none;
-    }}
+    }
 
-    .btn:hover {{
+    .btn:hover {
       background: #1e293b;
       border-color: var(--accent);
       color: #ffffff;
-    }}
+    }
 
-    .btn-primary {{
+    .btn-primary {
       background: linear-gradient(135deg, #0284c7, #2563eb);
       border: 1px solid #38bdf8;
       color: #ffffff;
       font-weight: 600;
-    }}
+    }
 
-    .btn-primary:hover {{
+    .btn-primary:hover {
       background: linear-gradient(135deg, #0369a1, #1d4ed8);
       box-shadow: 0 0 14px var(--accent-glow);
-    }}
+    }
 
-    .workspace {{
+    .workspace {
       flex: 1;
       display: flex;
       position: relative;
       overflow: hidden;
-    }}
+    }
 
-    aside.sidebar {{
-      width: 310px;
+    aside.sidebar {
+      width: 320px;
       background: rgba(12, 17, 29, 0.9);
       backdrop-filter: blur(12px);
       border-right: 1px solid var(--border);
@@ -567,19 +701,19 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       flex-direction: column;
       z-index: 20;
       flex-shrink: 0;
-    }}
+    }
 
-    .sidebar-header {{
+    .sidebar-header {
       padding: 12px 14px;
       border-bottom: 1px solid var(--border);
-    }}
+    }
 
-    .search-box {{
+    .search-box {
       position: relative;
       width: 100%;
-    }}
+    }
 
-    .search-box input {{
+    .search-box input {
       width: 100%;
       background: #090d16;
       border: 1px solid var(--border);
@@ -590,63 +724,84 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       font-family: var(--font-ui);
       outline: none;
       transition: border-color 0.2s;
-    }}
+    }
 
-    .search-box input:focus {{
+    .search-box input:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 2px var(--accent-glow);
-    }}
+    }
 
-    .search-box .search-icon {{
+    .search-box .search-icon {
       position: absolute;
       left: 9px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
       font-size: 12px;
-    }}
+    }
 
-    .metrics-grid {{
+    .metrics-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 6px;
       padding: 10px 14px;
       background: rgba(9, 13, 22, 0.6);
       border-bottom: 1px solid var(--border);
-    }}
+    }
 
-    .metric-card {{
+    .metric-card {
       background: var(--bg-surface-elevated);
       padding: 6px 8px;
       border-radius: 6px;
       border: 1px solid rgba(255, 255, 255, 0.04);
       text-align: center;
-    }}
+    }
 
-    .metric-card .label {{
+    .metric-card .label {
       font-size: 10px;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.3px;
-    }}
+    }
 
-    .metric-card .value {{
+    .metric-card .value {
       font-size: 15px;
       font-weight: 700;
       color: #ffffff;
       font-family: var(--font-mono);
       margin-top: 1px;
-    }}
+    }
 
-    .layer-filters {{
+    .cycle-alert-bar {
+      margin: 8px 12px 2px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      font-size: 11.5px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .cycle-alert-bar:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+      color: #ffffff;
+    }
+
+    .layer-filters {
       padding: 8px 14px 6px;
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
       border-bottom: 1px solid var(--border);
-    }}
+    }
 
-    .layer-chip {{
+    .layer-chip {
       font-size: 10.5px;
       font-weight: 500;
       padding: 2px 7px;
@@ -656,21 +811,21 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       color: var(--text-muted);
       cursor: pointer;
       transition: all 0.15s ease;
-    }}
+    }
 
-    .layer-chip:hover, .layer-chip.active {{
+    .layer-chip:hover, .layer-chip.active {
       background: rgba(56, 189, 248, 0.15);
       border-color: var(--accent);
       color: #ffffff;
-    }}
+    }
 
-    .module-list {{
+    .module-list {
       flex: 1;
       overflow-y: auto;
       padding: 8px 10px;
-    }}
+    }
 
-    .module-item {{
+    .module-item {
       padding: 8px 10px;
       margin-bottom: 5px;
       background: var(--bg-surface-elevated);
@@ -678,15 +833,15 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       border-radius: 6px;
       cursor: pointer;
       transition: all 0.15s ease;
-    }}
+    }
 
-    .module-item:hover, .module-item.selected {{
+    .module-item:hover, .module-item.selected {
       background: #1e293b;
       border-color: var(--accent);
       transform: translateX(2px);
-    }}
+    }
 
-    .module-title {{
+    .module-title {
       font-size: 12.5px;
       font-weight: 600;
       color: #f8fafc;
@@ -694,18 +849,18 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       align-items: center;
       justify-content: space-between;
       gap: 6px;
-    }}
+    }
 
-    .module-sub {{
+    .module-sub {
       font-size: 11px;
       color: var(--text-muted);
       margin-top: 2px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }}
+    }
 
-    .tag-badge {{
+    .tag-badge {
       font-size: 9.5px;
       font-weight: 600;
       padding: 1px 5px;
@@ -713,10 +868,9 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       background: rgba(56, 189, 248, 0.1);
       color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.2);
-    }}
+    }
 
-    /* Viewport & Native Absolute Transform Pan/Zoom Canvas */
-    main.viewport {{
+    main.viewport {
       flex: 1;
       position: relative;
       background-color: #06080e;
@@ -729,29 +883,28 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       cursor: grab;
       user-select: none;
       touch-action: none;
-    }}
+    }
 
-    main.viewport.is-dragging {{
+    main.viewport.is-dragging {
       cursor: grabbing;
-    }}
+    }
 
-    #pan-layer {{
+    #pan-layer {
       position: absolute;
       top: 0;
       left: 0;
       transform-origin: 0 0;
       will-change: transform;
       pointer-events: auto;
-    }}
+    }
 
-    #pan-layer svg {{
+    #pan-layer svg {
       display: block;
       overflow: visible;
       filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
-    }}
+    }
 
-    /* Floating Viewport Controls */
-    .viewport-controls {{
+    .viewport-controls {
       position: absolute;
       top: 14px;
       right: 14px;
@@ -765,18 +918,18 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       border: 1px solid var(--border);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
       z-index: 30;
-    }}
+    }
 
-    .zoom-badge {{
+    .zoom-badge {
       font-family: var(--font-mono);
       font-size: 11px;
       color: var(--text-muted);
       padding: 0 6px;
       min-width: 44px;
       text-align: center;
-    }}
+    }
 
-    .control-btn {{
+    .control-btn {
       width: 30px;
       height: 30px;
       border-radius: 5px;
@@ -789,32 +942,42 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       cursor: pointer;
       font-size: 13px;
       transition: all 0.15s ease;
-    }}
+    }
 
-    .control-btn:hover {{
+    .control-btn:hover {
       background: #1e293b;
       border-color: var(--accent);
       color: var(--accent);
-    }}
+    }
 
-    .hint-chip {{
+    .hint-chip {
       position: absolute;
       bottom: 14px;
       left: 14px;
-      background: rgba(12, 17, 29, 0.85);
+      background: rgba(12, 17, 29, 0.9);
       backdrop-filter: blur(8px);
-      padding: 5px 12px;
+      padding: 6px 14px;
       border-radius: 20px;
-      font-size: 11px;
+      font-size: 11.5px;
       color: var(--text-muted);
       border: 1px solid var(--border);
       pointer-events: none;
       z-index: 30;
-    }}
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-    /* Inspector Drawer */
-    aside.inspector {{
-      width: 340px;
+    .legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+
+    aside.inspector {
+      width: 360px;
       background: rgba(12, 17, 29, 0.96);
       backdrop-filter: blur(16px);
       border-left: 1px solid var(--border);
@@ -828,39 +991,77 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       top: 0;
       bottom: 0;
       box-shadow: -8px 0 30px rgba(0, 0, 0, 0.5);
-    }}
+    }
 
-    aside.inspector.open {{
+    aside.inspector.open {
       transform: translateX(0);
-    }}
+    }
 
-    .inspector-header {{
+    .inspector-header {
       padding: 14px 18px;
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-    }}
+    }
 
-    .inspector-body {{
+    .inspector-body {
       flex: 1;
       overflow-y: auto;
       padding: 16px 18px;
       display: flex;
       flex-direction: column;
       gap: 16px;
-    }}
+    }
 
-    .section-title {{
+    .section-title {
       font-size: 10.5px;
       text-transform: uppercase;
       letter-spacing: 0.6px;
       color: var(--text-muted);
       margin-bottom: 6px;
       font-weight: 600;
-    }}
+    }
 
-    .symbol-pill {{
+    .class-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+
+    .class-header {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+
+    .class-kw {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    .class-bases {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
+    .class-methods {
+      margin-top: 4px;
+      padding-left: 8px;
+      border-left: 2px solid #1e293b;
+    }
+
+    .method-sig {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #cbd5e1;
+      margin: 2px 0;
+    }
+
+    .symbol-pill {
       display: inline-block;
       padding: 3px 7px;
       margin: 2px 3px 3px 0;
@@ -870,9 +1071,33 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       font-size: 11px;
       font-family: var(--font-mono);
       color: #38bdf8;
-    }}
+    }
 
-    .dep-link {{
+    .ext-pill {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px 4px 4px 0;
+      border-radius: 4px;
+      background: rgba(129, 140, 248, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #c7d2fe;
+    }
+
+    .stdlib-pill {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 2px 3px 3px 0;
+      border-radius: 4px;
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: #94a3b8;
+    }
+
+    .dep-link {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -886,15 +1111,15 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       text-decoration: none;
       color: var(--text-main);
       transition: all 0.15s ease;
-    }}
+    }
 
-    .dep-link:hover {{
+    .dep-link:hover {
       border-color: var(--accent);
       background: #131b2e;
-    }}
+    }
 
-    /* Architecture Overview Modal */
-    .modal-overlay {{
+    /* Modals */
+    .modal-overlay {
       display: none;
       position: fixed;
       inset: 0;
@@ -904,51 +1129,70 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       align-items: center;
       justify-content: center;
       padding: 20px;
-    }}
+    }
 
-    .modal-overlay.active {{
+    .modal-overlay.active {
       display: flex;
-    }}
+    }
 
-    .modal-dialog {{
+    .modal-dialog {
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      max-width: 620px;
+      max-width: 640px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 20px 40px rgba(0,0,0,0.6);
       padding: 20px;
       position: relative;
-    }}
+    }
 
-    .modal-dialog h3 {{
+    .modal-dialog h3 {
       font-size: 17px;
       margin-bottom: 4px;
-    }}
+    }
 
-    .guide-step {{
+    .guide-step {
       background: var(--bg-surface-elevated);
       border: 1px solid var(--border);
       border-radius: 7px;
       padding: 12px 14px;
       margin-top: 10px;
-    }}
+    }
 
-    .guide-step h4 {{
+    .guide-step h4 {
       font-size: 13px;
       color: var(--accent);
       margin-bottom: 3px;
-    }}
+    }
 
-    .guide-step p {{
+    .guide-step p {
       font-size: 12px;
       color: var(--text-muted);
       line-height: 1.45;
-    }}
+    }
 
-    #toast {{
+    .cycle-card {
+      background: #090d16;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 8px;
+    }
+
+    .cycle-chain {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #fca5a5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.5;
+    }
+
+    #toast {
       position: fixed;
       bottom: 20px;
       right: 20px;
@@ -963,12 +1207,12 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       opacity: 0;
       transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 200;
-    }}
+    }
 
-    #toast.show {{
+    #toast.show {
       transform: translateY(0);
       opacity: 1;
-    }}
+    }
   </style>
 </head>
 <body>
@@ -977,7 +1221,7 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
     <div class="brand-group">
       <div class="logo-badge">RG</div>
       <div class="title-group">
-        <h1>{repo_name}</h1>
+        <h1>__REPO_NAME__</h1>
         <p>Codebase Architecture & Dependency Graph Explorer</p>
       </div>
     </div>
@@ -987,7 +1231,9 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
         <span class="status-dot"></span>
         <span>Deterministic AST Engine</span>
       </div>
-      
+
+      <div id="cycles-nav-badge"></div>
+
       <button class="btn" onclick="openOverviewModal()">
         <span>Overview</span>
       </button>
@@ -1018,21 +1264,23 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="label">Files</div>
-          <div class="value">{total_files}</div>
+          <div class="value">__TOTAL_FILES__</div>
         </div>
         <div class="metric-card">
           <div class="label">Classes</div>
-          <div class="value">{total_classes}</div>
+          <div class="value">__TOTAL_CLASSES__</div>
         </div>
         <div class="metric-card">
           <div class="label">Funcs</div>
-          <div class="value">{total_functions}</div>
+          <div class="value">__TOTAL_FUNCS__</div>
         </div>
         <div class="metric-card">
           <div class="label">Edges</div>
-          <div class="value">{total_deps}</div>
+          <div class="value">__TOTAL_DEPS__</div>
         </div>
       </div>
+
+      <div id="cycles-sidebar-container"></div>
 
       <div class="layer-filters" id="layer-filters">
         <span class="layer-chip active" onclick="filterByLayer('ALL')">All</span>
@@ -1057,7 +1305,10 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       </div>
 
       <div class="hint-chip">
-        Drag to Pan &bull; Scroll to Zoom &bull; Click Node to Inspect &bull; ⇄ to Switch Orientation
+        <span><span class="legend-dot" style="background:#38bdf8;"></span>Selected</span>
+        <span><span class="legend-dot" style="background:#10b981;"></span>Inbound Caller</span>
+        <span><span class="legend-dot" style="background:#06b6d4;"></span>Outbound Dependency</span>
+        <span>&bull; Drag to Pan &bull; Scroll to Zoom</span>
       </div>
     </main>
 
@@ -1073,7 +1324,7 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       <div class="inspector-body">
         <div>
           <div class="section-title">Module Summary</div>
-          <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.4;" id="insp-doc"></p>
+          <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.45;" id="insp-doc"></p>
         </div>
 
         <div>
@@ -1091,7 +1342,7 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
         </div>
 
         <div id="insp-classes-section">
-          <div class="section-title">Classes Defined</div>
+          <div class="section-title">Classes & Methods</div>
           <div id="insp-classes"></div>
         </div>
 
@@ -1101,26 +1352,37 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
         </div>
 
         <div>
-          <div class="section-title">Outbound Dependencies (Imports)</div>
+          <div class="section-title">Outbound Internal Dependencies</div>
           <div id="insp-deps"></div>
         </div>
 
         <div>
-          <div class="section-title">Inbound Dependencies (Imported By)</div>
+          <div class="section-title">Inbound Callers (Imported By)</div>
           <div id="insp-imported-by"></div>
+        </div>
+
+        <div id="insp-ext-section">
+          <div class="section-title">External / Third-Party Packages</div>
+          <div id="insp-ext"></div>
+        </div>
+
+        <div id="insp-stdlib-section">
+          <div class="section-title">Standard Library Dependencies</div>
+          <div id="insp-stdlib"></div>
         </div>
       </div>
     </aside>
   </div>
 
+  <!-- Architecture Overview Modal -->
   <div class="modal-overlay" id="overview-modal" onclick="closeOverviewModalOnOut(event)">
     <div class="modal-dialog">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>Architecture Overview</h3>
+        <h3>Architecture Overview: __REPO_NAME__</h3>
         <button class="control-btn" onclick="closeOverviewModal()">✕</button>
       </div>
       <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
-        Architectural layers and execution boundaries in <strong>{repo_name}</strong>.
+        Architectural layers and execution boundaries in <strong>__REPO_NAME__</strong>.
       </p>
 
       <div class="guide-step">
@@ -1144,14 +1406,33 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
     </div>
   </div>
 
-  <div id="toast">Mermaid diagram copied to clipboard!</div>
+  <!-- Circular Dependencies Modal -->
+  <div class="modal-overlay" id="cycles-modal" onclick="closeCyclesModalOnOut(event)">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#f87171;">Circular Dependencies Detected</h3>
+        <button class="control-btn" onclick="closeCyclesModal()">✕</button>
+      </div>
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
+        Circular import chains introduce runtime `ImportError` exceptions and tight architectural coupling.
+      </p>
+
+      <div id="cycles-list-container" style="margin-top: 12px;"></div>
+
+      <div style="margin-top: 16px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeCyclesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">Diagram copied to clipboard!</div>
 
   <script>
-    const SUMMARY = {summary_json};
-    const CYCLES = {cycles_json};
-    const MERMAID_TD = {json.dumps(mermaid_td)};
-    const MERMAID_LR = {json.dumps(mermaid_lr)};
-    const REPO_NAME = "{repo_name}";
+    const SUMMARY = __SUMMARY_JSON__;
+    const CYCLES = __CYCLES_JSON__;
+    const MERMAID_TD = __MERMAID_TD__;
+    const MERMAID_LR = __MERMAID_LR__;
+    const REPO_NAME = "__REPO_NAME__";
 
     let currentDirection = "TD";
     let selectedModule = null;
@@ -1167,43 +1448,43 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
     let startX = 0;
     let startY = 0;
 
-    function updateTransform(smooth = false) {{
-      if (smooth) {{
+    function updateTransform(smooth = false) {
+      if (smooth) {
         panLayer.style.transition = "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
-      }} else {{
+      } else {
         panLayer.style.transition = "none";
-      }}
-      panLayer.style.transform = `translate(${{translateX}}px, ${{translateY}}px) scale(${{scale}})`;
+      }
+      panLayer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
       
       const zoomIndicator = document.getElementById("zoom-level");
-      if (zoomIndicator) {{
+      if (zoomIndicator) {
         zoomIndicator.innerText = Math.round(scale * 100) + "%";
-      }}
-    }}
+      }
+    }
 
-    viewport.addEventListener("mousedown", (e) => {{
+    viewport.addEventListener("mousedown", (e) => {
       if (e.button !== 0 || e.target.closest(".viewport-controls") || e.target.closest(".hint-chip")) return;
       isDragging = true;
       startX = e.clientX - translateX;
       startY = e.clientY - translateY;
       viewport.classList.add("is-dragging");
-    }});
+    });
 
-    window.addEventListener("mousemove", (e) => {{
+    window.addEventListener("mousemove", (e) => {
       if (!isDragging) return;
       translateX = e.clientX - startX;
       translateY = e.clientY - startY;
       updateTransform(false);
-    }});
+    });
 
-    window.addEventListener("mouseup", () => {{
-      if (isDragging) {{
+    window.addEventListener("mouseup", () => {
+      if (isDragging) {
         isDragging = false;
         viewport.classList.remove("is-dragging");
-      }}
-    }});
+      }
+    });
 
-    viewport.addEventListener("wheel", (e) => {{
+    viewport.addEventListener("wheel", (e) => {
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -1217,34 +1498,34 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       scale = newScale;
 
       updateTransform(false);
-    }}, {{ passive: false }});
+    }, { passive: false });
 
     // Touch events for mobile & tablets
     let initialTouchDist = 0;
     let initialTouchScale = 1;
 
-    viewport.addEventListener("touchstart", (e) => {{
-      if (e.touches.length === 1) {{
+    viewport.addEventListener("touchstart", (e) => {
+      if (e.touches.length === 1) {
         isDragging = true;
         startX = e.touches[0].clientX - translateX;
         startY = e.touches[0].clientY - translateY;
         viewport.classList.add("is-dragging");
-      }} else if (e.touches.length === 2) {{
+      } else if (e.touches.length === 2) {
         isDragging = false;
         initialTouchDist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
         initialTouchScale = scale;
-      }}
-    }}, {{ passive: true }});
+      }
+    }, { passive: true });
 
-    viewport.addEventListener("touchmove", (e) => {{
-      if (e.touches.length === 1 && isDragging) {{
+    viewport.addEventListener("touchmove", (e) => {
+      if (e.touches.length === 1 && isDragging) {
         translateX = e.touches[0].clientX - startX;
         translateY = e.touches[0].clientY - startY;
         updateTransform(false);
-      }} else if (e.touches.length === 2 && initialTouchDist > 0) {{
+      } else if (e.touches.length === 2 && initialTouchDist > 0) {
         const dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
@@ -1262,24 +1543,19 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
         translateY = touchY - (touchY - translateY) * (newScale / scale);
         scale = newScale;
         updateTransform(false);
-      }}
-    }}, {{ passive: true }});
+      }
+    }, { passive: true });
 
-    viewport.addEventListener("touchend", () => {{
+    viewport.addEventListener("touchend", () => {
       isDragging = false;
       initialTouchDist = 0;
       viewport.classList.remove("is-dragging");
-    }});
+    });
 
-    function zoomIn() {{
-      zoomAtCenter(1.25);
-    }}
+    function zoomIn() { zoomAtCenter(1.25); }
+    function zoomOut() { zoomAtCenter(0.8); }
 
-    function zoomOut() {{
-      zoomAtCenter(0.8);
-    }}
-
-    function zoomAtCenter(factor) {{
+    function zoomAtCenter(factor) {
       const cx = viewport.clientWidth / 2;
       const cy = viewport.clientHeight / 2;
       const newScale = Math.min(Math.max(scale * factor, 0.15), 6.0);
@@ -1287,13 +1563,11 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       translateY = cy - (cy - translateY) * (newScale / scale);
       scale = newScale;
       updateTransform(true);
-    }}
+    }
 
-    function resetZoom() {{
-      fitToScreen(true);
-    }}
+    function resetZoom() { fitToScreen(true); }
 
-    function fitToScreen(smooth = true) {{
+    function fitToScreen(smooth = true) {
       const svgEl = panLayer.querySelector("svg");
       if (!svgEl) return;
       
@@ -1304,20 +1578,19 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       let svgW = 800;
       let svgH = 600;
 
-      if (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width > 0) {{
+      if (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width > 0) {
         svgW = svgEl.viewBox.baseVal.width;
         svgH = svgEl.viewBox.baseVal.height;
-      }} else {{
-        try {{
+      } else {
+        try {
           const bbox = svgEl.getBBox();
-          if (bbox.width > 0) {{
+          if (bbox.width > 0) {
             svgW = bbox.width;
             svgH = bbox.height;
-          }}
-        }} catch(e) {{}}
-      }}
+          }
+        } catch(e) {}
+      }
 
-      // Standardize size
       svgEl.style.width = svgW + "px";
       svgEl.style.height = svgH + "px";
       svgEl.style.maxWidth = "none";
@@ -1330,296 +1603,508 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       const scaleX = availW / svgW;
       const scaleY = availH / svgH;
       scale = Math.min(scaleX, scaleY);
-      scale = Math.min(Math.max(scale, 0.25), 1.25);
+      scale = Math.min(Math.max(scale, 0.2), 1.25);
 
       translateX = (vpW - svgW * scale) / 2;
       translateY = (vpH - svgH * scale) / 2;
 
       updateTransform(smooth);
-    }}
+    }
 
-    function toggleLayout() {{
+    function toggleLayout() {
       currentDirection = currentDirection === "TD" ? "LR" : "TD";
       renderMermaidDiagram();
       showToast("Switched to " + (currentDirection === "TD" ? "Top-Down" : "Left-to-Right") + " view");
-    }}
+    }
 
-    // --- MERMAID RENDERING & INTERACTION ---
-    mermaid.initialize({{
+    // --- MERMAID RENDERING & BIDIRECTIONAL PATHWAY LIGHTING ---
+    mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
-      themeVariables: {{
+      themeVariables: {
         darkMode: true,
         background: '#06080e',
         primaryColor: '#0284c7',
         primaryTextColor: '#f8fafc',
         lineColor: '#38bdf8'
-      }}
-    }});
+      }
+    });
 
-    async function renderMermaidDiagram() {{
+    async function renderMermaidDiagram() {
       panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Rendering architecture graph...</div>';
-      try {{
+      try {
         const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
         const uniqueId = "mermaid_svg_" + Date.now();
-        const {{ svg }} = await mermaid.render(uniqueId, rawCode);
+        const { svg } = await mermaid.render(uniqueId, rawCode);
         panLayer.innerHTML = svg;
 
         const svgEl = panLayer.querySelector("svg");
-        if (svgEl) {{
+        if (svgEl) {
           svgEl.style.maxWidth = "none";
           svgEl.style.display = "block";
           svgEl.removeAttribute("height");
 
           attachSvgNodeListeners();
-          requestAnimationFrame(() => {{
+          requestAnimationFrame(() => {
             fitToScreen(false);
-          }});
-        }}
-      }} catch (err) {{
+          });
+        }
+      } catch (err) {
         console.error("Mermaid error:", err);
         panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Error rendering diagram.</div>';
-      }}
-    }}
+      }
+    }
 
-    function attachSvgNodeListeners() {{
+    function attachSvgNodeListeners() {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
 
       const nodes = svg.querySelectorAll(".node");
-      nodes.forEach(node => {{
+      nodes.forEach(node => {
         node.style.cursor = "pointer";
-        node.addEventListener("click", (e) => {{
+        node.addEventListener("click", (e) => {
           e.stopPropagation();
           const cleanId = node.id.replace(/^flowchart-/, "").replace(/-[0-9]+$/, "");
-          for (const [file, data] of Object.entries(SUMMARY)) {{
-            if (data.id === cleanId || node.id.includes(data.id)) {{
+          for (const [file, data] of Object.entries(SUMMARY)) {
+            if (data.id === cleanId || node.id.includes(data.id)) {
               inspectModule(file);
-              highlightNodeConnections(data.id);
+              highlightNodeConnections(file);
               break;
-            }}
-          }}
-        }});
-      }});
+            }
+          }
+        });
+      });
 
-      viewport.addEventListener("click", (e) => {{
-        if (!e.target.closest(".node") && !e.target.closest("#inspector-drawer") && !e.target.closest(".module-item")) {{
+      viewport.addEventListener("click", (e) => {
+        if (!e.target.closest(".node") && !e.target.closest("#inspector-drawer") && !e.target.closest(".module-item")) {
           resetHighlights();
-        }}
-      }});
-    }}
+        }
+      });
+    }
 
-    function highlightNodeConnections(nodeId) {{
+    // TRUE PATHWAY LIGHTING: Selected = Blue, Inbound = Emerald Green, Outbound = Cyan
+    function highlightNodeConnections(fileOrId) {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
+
+      let targetData = SUMMARY[fileOrId];
+      if (!targetData) {
+        targetData = Object.values(SUMMARY).find(d => d.id === fileOrId);
+      }
+      if (!targetData) return;
+
+      const targetId = targetData.id;
+      const inboundIds = new Set((targetData.imported_by || []).map(f => SUMMARY[f]?.id).filter(Boolean));
+      const outboundIds = new Set((targetData.internal_dependencies || []).map(f => SUMMARY[f]?.id).filter(Boolean));
 
       const nodes = svg.querySelectorAll(".node");
       const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
 
-      nodes.forEach(n => {{
-        if (n.id.includes(nodeId)) {{
+      nodes.forEach(n => {
+        const nId = n.id || "";
+        const shape = n.querySelector("rect, polygon, circle, path");
+
+        if (nId.includes(targetId)) {
+          // Selected Node
           n.style.opacity = "1";
-          n.style.filter = "drop-shadow(0 0 10px #38bdf8)";
-        }} else {{
-          n.style.opacity = "0.22";
+          n.style.filter = "drop-shadow(0 0 12px #38bdf8)";
+          if (shape) {
+            shape.style.stroke = "#38bdf8";
+            shape.style.strokeWidth = "2.5px";
+          }
+        } else if (Array.from(inboundIds).some(id => nId.includes(id))) {
+          // Inbound Callers -> Emerald Green
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #10b981)";
+          if (shape) {
+            shape.style.stroke = "#10b981";
+            shape.style.strokeWidth = "2.5px";
+          }
+        } else if (Array.from(outboundIds).some(id => nId.includes(id))) {
+          // Outbound Dependencies -> Cyan
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #06b6d4)";
+          if (shape) {
+            shape.style.stroke = "#06b6d4";
+            shape.style.strokeWidth = "2.5px";
+          }
+        } else {
+          n.style.opacity = "0.15";
           n.style.filter = "none";
-        }}
-      }});
+          if (shape) {
+            shape.style.stroke = "";
+            shape.style.strokeWidth = "";
+          }
+        }
+      });
 
-      edges.forEach(e => {{
-        if (e.id && e.id.includes(nodeId)) {{
+      edges.forEach(e => {
+        const eId = e.id || "";
+        const pathEl = e.querySelector("path");
+
+        const isInbound = Array.from(inboundIds).some(id => eId.includes(id) && eId.includes(targetId));
+        const isOutbound = Array.from(outboundIds).some(id => eId.includes(id) && eId.includes(targetId));
+
+        if (isInbound) {
           e.style.opacity = "1";
-        }} else {{
-          e.style.opacity = "0.12";
-        }}
-      }});
-    }}
+          if (pathEl) {
+            pathEl.style.stroke = "#10b981";
+            pathEl.style.strokeWidth = "2.5px";
+          }
+        } else if (isOutbound) {
+          e.style.opacity = "1";
+          if (pathEl) {
+            pathEl.style.stroke = "#06b6d4";
+            pathEl.style.strokeWidth = "2.5px";
+          }
+        } else {
+          e.style.opacity = "0.08";
+          if (pathEl) {
+            pathEl.style.stroke = "";
+            pathEl.style.strokeWidth = "";
+          }
+        }
+      });
+    }
 
-    function resetHighlights() {{
+    function highlightCycle(cycleNodes) {
+      closeCyclesModal();
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
-      svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {{
+
+      const cycleIds = new Set(cycleNodes.map(f => SUMMARY[f]?.id).filter(Boolean));
+      const nodes = svg.querySelectorAll(".node");
+      const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
+
+      nodes.forEach(n => {
+        const nId = n.id || "";
+        const shape = n.querySelector("rect, polygon, circle, path");
+        if (Array.from(cycleIds).some(id => nId.includes(id))) {
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 12px #ef4444)";
+          if (shape) {
+            shape.style.stroke = "#ef4444";
+            shape.style.strokeWidth = "3px";
+          }
+        } else {
+          n.style.opacity = "0.12";
+          n.style.filter = "none";
+          if (shape) {
+            shape.style.stroke = "";
+            shape.style.strokeWidth = "";
+          }
+        }
+      });
+
+      edges.forEach(e => {
+        const eId = e.id || "";
+        const pathEl = e.querySelector("path");
+        const inCycle = Array.from(cycleIds).some(id1 => Array.from(cycleIds).some(id2 => id1 !== id2 && eId.includes(id1) && eId.includes(id2)));
+        if (inCycle) {
+          e.style.opacity = "1";
+          if (pathEl) {
+            pathEl.style.stroke = "#ef4444";
+            pathEl.style.strokeWidth = "3px";
+          }
+        } else {
+          e.style.opacity = "0.05";
+        }
+      });
+
+      showToast("Highlighting circular dependency in red");
+    }
+
+    function resetHighlights() {
+      const svg = panLayer.querySelector("svg");
+      if (!svg) return;
+      svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {
         el.style.opacity = "1";
         el.style.filter = "none";
-      }});
-    }}
+        const shape = el.querySelector("rect, polygon, circle, path");
+        if (shape) {
+          shape.style.stroke = "";
+          shape.style.strokeWidth = "";
+        }
+      });
+    }
 
-    function initSidebar() {{
+    function initSidebar() {
       const list = document.getElementById("module-list");
       const filterContainer = document.getElementById("layer-filters");
       const layers = new Set();
 
       list.innerHTML = "";
-      for (const [file, data] of Object.entries(SUMMARY)) {{
+      for (const [file, data] of Object.entries(SUMMARY)) {
         layers.add(data.layer);
 
         const item = document.createElement("div");
         item.className = "module-item";
-        item.id = `mod-item-${{data.id}}`;
-        item.onclick = () => {{
+        item.id = `mod-item-${data.id}`;
+        item.onclick = () => {
           inspectModule(file);
-          highlightNodeConnections(data.id);
-        }};
+          highlightNodeConnections(file);
+        };
 
         item.innerHTML = `
           <div class="module-title">
-            <span style="overflow:hidden; text-overflow:ellipsis;">${{file}}</span>
-            <span class="tag-badge">${{data.layer.split(' ')[0]}}</span>
+            <span style="overflow:hidden; text-overflow:ellipsis;">${file}</span>
+            <span class="tag-badge">${data.layer.split(' ')[0]}</span>
           </div>
           <div class="module-sub">
-            ${{data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module')}}
+            ${data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module')}
           </div>
         `;
         list.appendChild(item);
-      }}
+      }
 
-      layers.forEach(layer => {{
+      layers.forEach(layer => {
         const chip = document.createElement("span");
         chip.className = "layer-chip";
         chip.innerText = layer;
         chip.onclick = () => filterByLayer(layer);
         filterContainer.appendChild(chip);
-      }});
+      });
 
+      initCyclesUI();
       populateOverviewModal();
-    }}
+    }
 
-    function filterByLayer(layer) {{
-      document.querySelectorAll(".layer-chip").forEach(c => {{
+    function initCyclesUI() {
+      const navBadge = document.getElementById("cycles-nav-badge");
+      const sidebarContainer = document.getElementById("cycles-sidebar-container");
+      const modalList = document.getElementById("cycles-list-container");
+
+      if (CYCLES && CYCLES.length > 0) {
+        navBadge.innerHTML = `
+          <div class="cycle-pill-nav cycle-pill-warn" onclick="openCyclesModal()">
+            <span>⚠️</span>
+            <span>${CYCLES.length} Circular Dependencies</span>
+          </div>
+        `;
+
+        sidebarContainer.innerHTML = `
+          <div class="cycle-alert-bar" onclick="openCyclesModal()">
+            <span>⚠️ ${CYCLES.length} Circular Imports Detected</span>
+            <span style="font-size:10px; text-decoration:underline;">View</span>
+          </div>
+        `;
+
+        modalList.innerHTML = CYCLES.map((cycle, i) => {
+          const chainHtml = cycle.map((node, idx) => `
+            <span>${node}</span>
+            ${idx < cycle.length - 1 ? '<span style="color:#ef4444; font-weight:700;">➔</span>' : ''}
+          `).join('');
+
+          return `
+            <div class="cycle-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle #${i+1} (${cycle.length - 1} steps)</span>
+                <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${JSON.stringify(cycle)})'>
+                  Highlight in Graph
+                </button>
+              </div>
+              <div class="cycle-chain">
+                ${chainHtml}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        navBadge.innerHTML = `
+          <div class="cycle-pill-nav cycle-pill-ok">
+            <span>✓</span>
+            <span>0 Circular Dependencies</span>
+          </div>
+        `;
+        sidebarContainer.innerHTML = '';
+      }
+    }
+
+    function filterByLayer(layer) {
+      document.querySelectorAll(".layer-chip").forEach(c => {
         c.classList.toggle("active", c.innerText === layer || (layer === 'ALL' && c.innerText === 'All'));
-      }});
+      });
 
-      for (const [file, data] of Object.entries(SUMMARY)) {{
-        const item = document.getElementById(`mod-item-${{data.id}}`);
+      for (const [file, data] of Object.entries(SUMMARY)) {
+        const item = document.getElementById(`mod-item-${data.id}`);
         if (!item) continue;
         item.style.display = (layer === "ALL" || data.layer === layer) ? "block" : "none";
-      }}
-    }}
+      }
+    }
 
-    function handleSearch(query) {{
+    function handleSearch(query) {
       const q = query.toLowerCase().trim();
-      for (const [file, data] of Object.entries(SUMMARY)) {{
-        const item = document.getElementById(`mod-item-${{data.id}}`);
+      for (const [file, data] of Object.entries(SUMMARY)) {
+        const item = document.getElementById(`mod-item-${data.id}`);
         if (!item) continue;
         const matches = file.toLowerCase().includes(q) ||
           data.classes.some(c => c.toLowerCase().includes(q)) ||
           data.functions.some(f => f.toLowerCase().includes(q)) ||
           data.layer.toLowerCase().includes(q);
         item.style.display = matches ? "block" : "none";
-      }}
-    }}
+      }
+    }
 
-    function inspectModule(file) {{
+    function inspectModule(file) {
       const data = SUMMARY[file];
       if (!data) return;
 
       selectedModule = file;
       document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
-      const selItem = document.getElementById(`mod-item-${{data.id}}`);
-      if (selItem) {{
+      const selItem = document.getElementById(`mod-item-${data.id}`);
+      if (selItem) {
         selItem.classList.add("selected");
-        selItem.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
-      }}
+        selItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
 
       document.getElementById("insp-file").innerText = file;
       document.getElementById("insp-layer").innerText = data.layer;
-      document.getElementById("insp-doc").innerText = data.docstring || "No module docstring specified.";
+      document.getElementById("insp-doc").innerText = data.full_docstring || data.docstring || "No module docstring specified.";
       document.getElementById("insp-loc").innerText = data.loc;
       document.getElementById("insp-complexity").innerText = data.complexity;
 
+      // Rich Class Details with Bases and Public Methods
       const clsContainer = document.getElementById("insp-classes");
-      if (data.classes.length > 0) {{
+      if (data.classes.length > 0) {
         document.getElementById("insp-classes-section").style.display = "block";
-        clsContainer.innerHTML = data.classes.map(c => `<span class="symbol-pill">${{c}}</span>`).join("");
-      }} else {{
+        clsContainer.innerHTML = data.classes.map(c => {
+          const details = data.class_details?.[c];
+          const bases = details?.bases?.length ? `(${details.bases.join(', ')})` : '';
+          const methods = details?.methods?.length 
+            ? details.methods.map(m => `<div class="method-sig"><code>${m}</code></div>`).join('') 
+            : '<div style="font-size:11px; color:var(--text-faint); margin:2px 0;">No public methods</div>';
+
+          return `
+            <div class="class-card">
+              <div class="class-header">
+                <span class="class-kw">class</span> <strong style="color:#ffffff;">${c}</strong> <span class="class-bases">${bases}</span>
+              </div>
+              <div class="class-methods">
+                ${methods}
+              </div>
+            </div>
+          `;
+        }).join("");
+      } else {
         document.getElementById("insp-classes-section").style.display = "none";
-      }}
+      }
 
+      // Public Functions
       const fnContainer = document.getElementById("insp-functions");
-      if (data.functions.length > 0) {{
+      if (data.functions.length > 0) {
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${{f}}</span>`).join("");
-      }} else {{
+        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${f}</span>`).join("");
+      } else {
         document.getElementById("insp-functions-section").style.display = "none";
-      }}
+      }
 
+      // Outbound Internal Dependencies
       const depsContainer = document.getElementById("insp-deps");
-      if (data.internal_dependencies.length > 0) {{
+      if (data.internal_dependencies.length > 0) {
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${{d}}'); highlightNodeConnections('${{SUMMARY[d]?.id}}');">
-            <span>↳ ${{d}}</span>
+          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${d}');">
+            <span>↳ ${d}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
         `).join("");
-      }} else {{
+      } else {
         depsContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Standalone (No internal dependencies)</span>`;
-      }}
+      }
 
+      // Inbound Callers
       const impByContainer = document.getElementById("insp-imported-by");
-      if (data.imported_by && data.imported_by.length > 0) {{
+      if (data.imported_by && data.imported_by.length > 0) {
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${{ib}}'); highlightNodeConnections('${{SUMMARY[ib]?.id}}');">
-            <span>↲ ${{ib}}</span>
+          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${ib}');">
+            <span>↲ ${ib}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
         `).join("");
-      }} else {{
+      } else {
         impByContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Not imported by internal modules</span>`;
-      }}
+      }
+
+      // External Dependencies
+      const extContainer = document.getElementById("insp-ext");
+      if (data.external_dependencies && data.external_dependencies.length > 0) {
+        document.getElementById("insp-ext-section").style.display = "block";
+        extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${e}</span>`).join("");
+      } else {
+        document.getElementById("insp-ext-section").style.display = "none";
+      }
+
+      // Standard Library
+      const stdlibContainer = document.getElementById("insp-stdlib");
+      if (data.stdlib_dependencies && data.stdlib_dependencies.length > 0) {
+        document.getElementById("insp-stdlib-section").style.display = "block";
+        stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${s}</span>`).join("");
+      } else {
+        document.getElementById("insp-stdlib-section").style.display = "none";
+      }
 
       document.getElementById("inspector-drawer").classList.add("open");
-    }}
+    }
 
-    function closeInspector() {{
+    function closeInspector() {
       document.getElementById("inspector-drawer").classList.remove("open");
       document.querySelectorAll(".module-item").forEach(i => i.classList.remove("selected"));
       resetHighlights();
-    }}
+    }
 
-    function populateOverviewModal() {{
+    function populateOverviewModal() {
       const entryPoints = Object.entries(SUMMARY).filter(([_, d]) => d.has_entry_point).map(([f]) => f);
       const coreFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("Core") || d.layer.includes("Domain")).map(([f]) => f);
       const apiFiles = Object.entries(SUMMARY).filter(([_, d]) => d.layer.includes("API") || d.layer.includes("Interface")).map(([f]) => f);
 
       document.getElementById("overview-entry-text").innerText = entryPoints.length 
-        ? `Execution begins at: ${{entryPoints.join(", ")}}.`
+        ? `Execution begins at: ${entryPoints.join(", ")}.`
         : `No explicit entry point found. Inspect top-level files.`;
 
       document.getElementById("overview-core-text").innerText = coreFiles.length 
-        ? `Core domain logic resides in: ${{coreFiles.join(", ")}}.`
+        ? `Core domain logic resides in: ${coreFiles.join(", ")}.`
         : `Domain logic is distributed among internal modules.`;
 
       document.getElementById("overview-api-text").innerText = apiFiles.length
-        ? `External endpoints and interfaces: ${{apiFiles.join(", ")}}.`
+        ? `External endpoints and interfaces: ${apiFiles.join(", ")}.`
         : `Internal library or pipeline without separate HTTP endpoints.`;
-    }}
+    }
 
-    function openOverviewModal() {{ document.getElementById("overview-modal").classList.add("active"); }}
-    function closeOverviewModal() {{ document.getElementById("overview-modal").classList.remove("active"); }}
-    function closeOverviewModalOnOut(e) {{ if (e.target.id === "overview-modal") closeOverviewModal(); }}
+    function openOverviewModal() { document.getElementById("overview-modal").classList.add("active"); }
+    function closeOverviewModal() { document.getElementById("overview-modal").classList.remove("active"); }
+    function closeOverviewModalOnOut(e) { if (e.target.id === "overview-modal") closeOverviewModal(); }
 
-    function showToast(msg) {{
+    function openCyclesModal() { document.getElementById("cycles-modal").classList.add("active"); }
+    function closeCyclesModal() { document.getElementById("cycles-modal").classList.remove("active"); }
+    function closeCyclesModalOnOut(e) { if (e.target.id === "cycles-modal") closeCyclesModal(); }
+
+    function showToast(msg) {
       const t = document.getElementById("toast");
       t.innerText = msg;
       t.classList.add("show");
       setTimeout(() => t.classList.remove("show"), 2500);
-    }}
+    }
 
-    function copyMermaid() {{
+    function copyMermaid() {
       const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
-      navigator.clipboard.writeText(rawCode).then(() => {{
+      navigator.clipboard.writeText(rawCode).then(() => {
         showToast("Mermaid diagram copied to clipboard");
-      }}).catch(() => {{
+      }).catch(() => {
         showToast("Could not access clipboard");
-      }});
-    }}
+      });
+    }
 
-    function downloadMarkdown() {{
+    function downloadMarkdown() {
       const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
       const ticks = "```";
-      const content = "# Architecture Overview: " + REPO_NAME + "\\n\\n" + ticks + "mermaid\\n" + rawCode + "\\n" + ticks + "\\n";
-      const blob = new Blob([content], {{ type: "text/markdown;charset=utf-8" }});
+      let content = "# Architecture Overview: " + REPO_NAME + "\\n\\n" + ticks + "mermaid\\n" + rawCode + "\\n" + ticks + "\\n";
+      if (CYCLES && CYCLES.length > 0) {
+        content += "\\n> [!WARNING]\\n> **Circular Dependencies Detected:**\\n";
+        CYCLES.forEach((c, idx) => {
+          content += "> - Cycle " + (idx + 1) + ": `" + c.join(" ➔ ") + "`\\n";
+        });
+      }
+      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1627,46 +2112,66 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
       a.click();
       URL.revokeObjectURL(url);
       showToast("ARCHITECTURE.md downloaded");
-    }}
+    }
 
-    function downloadSVG() {{
+    function downloadSVG() {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+      const styleEl = document.createElement("style");
+      styleEl.textContent = `
+        .node rect, .node circle, .node ellipse, .node polygon, .node path { fill: #0f172a; stroke: #64748b; stroke-width: 1.5px; }
+        .node .label text, .node text { fill: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
+        .edgePath path { stroke: #38bdf8; stroke-width: 1.5px; fill: none; }
+        .edgeLabel text { fill: #94a3b8; font-family: monospace; font-size: 11px; }
+        .cluster rect { fill: #0b1120; stroke: #1e293b; stroke-width: 1px; stroke-dasharray: 4 4; }
+        .cluster text { fill: #94a3b8; font-family: -apple-system, sans-serif; font-weight: 600; font-size: 12px; }
+      `;
+      clone.insertBefore(styleEl, clone.firstChild);
+
       const serializer = new XMLSerializer();
-      const source = serializer.serializeToString(svg);
-      const blob = new Blob([source], {{ type: "image/svg+xml;charset=utf-8" }});
+      let source = serializer.serializeToString(clone);
+      if (!source.match(/^<svg[^>]+xmlns="http:\\/\\/www\\.w3\\.org\\/2000\\/svg"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${{REPO_NAME}}-architecture.svg`;
+      a.download = `${REPO_NAME}-architecture.svg`;
       a.click();
       URL.revokeObjectURL(url);
       showToast("SVG exported successfully");
-    }}
+    }
 
-    window.addEventListener("keydown", (e) => {{
-      if (e.key === "Escape") {{
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
         closeInspector();
         closeOverviewModal();
-      }} else if ((e.metaKey || e.ctrlKey) && e.key === "k") {{
+        closeCyclesModal();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         document.getElementById("module-search")?.focus();
-      }} else if (e.key === "+" || e.key === "=") {{
+      } else if (e.key === "+" || e.key === "=") {
         zoomIn();
-      }} else if (e.key === "-" || e.key === "_") {{
+      } else if (e.key === "-" || e.key === "_") {
         zoomOut();
-      }} else if (e.key === "0" || e.key.toLowerCase() === "f") {{
+      } else if (e.key === "0" || e.key.toLowerCase() === "f") {
         fitToScreen(true);
-      }} else if (e.key.toLowerCase() === "t") {{
+      } else if (e.key.toLowerCase() === "t") {
         toggleLayout();
-      }}
-    }});
+      } else if (e.key.toLowerCase() === "c" && CYCLES.length > 0) {
+        openCyclesModal();
+      }
+    });
 
-    window.addEventListener("resize", () => {{
+    window.addEventListener("resize", () => {
       fitToScreen(false);
-    }});
+    });
 
-    // Kick off
     initSidebar();
     renderMermaidDiagram();
   </script>
@@ -1674,42 +2179,143 @@ def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary
 </html>
 """
 
-def serve_directory(port: int = 8080):
+
+def build_unified_html(mermaid_td: str, mermaid_lr: str, repo_name: str, summary: Dict[str, Any]) -> str:
+    summary_json = json.dumps(summary, indent=None)
+    cycles = detect_circular_dependencies(summary)
+    cycles_json = json.dumps(cycles)
+
+    total_files = len(summary)
+    total_classes = sum(len(d["classes"]) for d in summary.values())
+    total_functions = sum(d["all_functions_count"] for d in summary.values())
+    total_loc = sum(d["loc"] for d in summary.values())
+    total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
+
+    content = HTML_TEMPLATE
+    replacements = {
+        "__REPO_NAME__": repo_name,
+        "__SUMMARY_JSON__": summary_json,
+        "__CYCLES_JSON__": cycles_json,
+        "__MERMAID_TD__": json.dumps(mermaid_td),
+        "__MERMAID_LR__": json.dumps(mermaid_lr),
+        "__TOTAL_FILES__": str(total_files),
+        "__TOTAL_CLASSES__": str(total_classes),
+        "__TOTAL_FUNCS__": str(total_functions),
+        "__TOTAL_DEPS__": str(total_deps),
+        "__TOTAL_LOC__": str(total_loc),
+        "__CYCLES_COUNT__": str(len(cycles))
+    }
+
+    for placeholder, val in replacements.items():
+        content = content.replace(placeholder, val)
+
+    return content
+
+
+def serve_directory(port: int = 8080, target_dir: str = ".", open_browser: bool = True):
     class QuietHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=target_dir, **kwargs)
+
         def log_message(self, format, *args):
             pass
 
-    server = HTTPServer(('localhost', port), QuietHandler)
+    server = HTTPServer(("localhost", port), QuietHandler)
     url = f"http://localhost:{port}/index.html"
     print(f"\nRepoGraph Server running at: {url}")
     print("Press Ctrl+C to stop.\n")
+    if open_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
     try:
-        webbrowser.open(url)
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nServer stopped.")
         server.server_close()
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        prog="repograph",
+        description="RepoGraph: Fast, deterministic codebase architecture & dependency graph explorer for Python."
+    )
+    parser.add_argument(
+        "-v", "--version",
+        action="version",
+        version=f"%(prog)s {__version__}"
+    )
+    parser.add_argument(
+        "target",
+        nargs="?",
+        default=".",
+        help="Path to Python repository or directory to analyze (default: current directory)"
+    )
+    parser.add_argument(
+        "-o", "--output",
+        default=None,
+        help="Output directory to place generated files (default: current working directory)"
+    )
+    parser.add_argument(
+        "--name",
+        default=None,
+        help="Custom project name to display (overrides auto-detection)"
+    )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Launch a lightweight local HTTP server and open the blueprint in your browser"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port for the local HTTP server (default: 8080)"
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open the browser automatically when --serve is used"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print raw codebase summary as JSON to stdout instead of generating HTML"
+    )
+    parser.add_argument(
+        "--exclude",
+        nargs="*",
+        default=[],
+        help="Additional directories, files, or patterns to exclude from analysis"
+    )
+    parser.add_argument(
+        "--no-html",
+        action="store_true",
+        help="Skip generating HTML blueprint (only generate ARCHITECTURE.md)"
+    )
+    return parser.parse_args()
+
+
 def main():
-    args = sys.argv[1:]
-    should_serve = "--serve" in args
-    output_json = "--json" in args
+    args = parse_args()
 
-    target_dir = "."
-    for arg in args:
-        if not arg.startswith("--"):
-            target_dir = arg
-            break
+    target_path = Path(args.target).resolve()
+    if not target_path.exists():
+        print(f"Error: Target path does not exist: {target_path}")
+        sys.exit(1)
 
-    target_path = Path(target_dir).resolve()
-    repo_name = resolve_repo_name(target_path)
+    output_dir = Path(args.output).resolve() if args.output else Path.cwd()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    repo_name = resolve_repo_name(target_path, args.name)
 
     print("\n" + "=" * 60)
     print(f" RepoGraph: {repo_name}")
     print("=" * 60)
 
-    print(f"\n[1/3] Parsing repository: {repo_name}...")
-    summary = scan_repository(target_path)
+    print(f"\n[1/3] Parsing repository: {target_path}...")
+    summary = scan_repository(target_path, extra_excludes=args.exclude)
 
     if not summary:
         print(f"[!] No Python files found in: {target_path}")
@@ -1717,9 +2323,14 @@ def main():
 
     total_classes = sum(len(d["classes"]) for d in summary.values())
     total_funcs = sum(d["all_functions_count"] for d in summary.values())
-    print(f"      Parsed {len(summary)} modules, {total_classes} classes, {total_funcs} functions in < 0.1s.")
+    total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
+    cycles = detect_circular_dependencies(summary)
 
-    if output_json:
+    print(f"      Parsed {len(summary)} modules, {total_classes} classes, {total_funcs} functions, {total_deps} edges.")
+    if cycles:
+        print(f"      [!] Warning: {len(cycles)} circular dependencies detected!")
+
+    if args.json:
         print(json.dumps(summary, indent=2))
         return
 
@@ -1727,22 +2338,32 @@ def main():
     mermaid_td = generate_bulletproof_ast_mermaid(summary, direction="TD")
     mermaid_lr = generate_bulletproof_ast_mermaid(summary, direction="LR")
 
-    print("[3/3] Exporting artifacts...")
-    with open("ARCHITECTURE.md", "w", encoding="utf-8") as f:
+    print("[3/3] Exporting artifacts to: " + str(output_dir) + "...")
+    arch_md_path = output_dir / "ARCHITECTURE.md"
+    with open(arch_md_path, "w", encoding="utf-8") as f:
         f.write(f"# Architecture Overview: {repo_name}\n\n```mermaid\n{mermaid_td}\n```\n")
+        if cycles:
+            f.write("\n## Circular Dependencies\n\n> [!WARNING]\n> The following circular import chains were detected:\n")
+            for idx, c in enumerate(cycles, 1):
+                f.write(f"> - **Cycle {idx}**: `{' ➔ '.join(c)}`\n")
 
-    html_page = build_unified_html(mermaid_td, mermaid_lr, repo_name, summary)
-    with open("repograph.html", "w", encoding="utf-8") as f:
-        f.write(html_page)
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_page)
+    if not args.no_html:
+        html_page = build_unified_html(mermaid_td, mermaid_lr, repo_name, summary)
+        repograph_html_path = output_dir / "repograph.html"
+        index_html_path = output_dir / "index.html"
+        with open(repograph_html_path, "w", encoding="utf-8") as f:
+            f.write(html_page)
+        with open(index_html_path, "w", encoding="utf-8") as f:
+            f.write(html_page)
 
     print("\nSuccess! Artifacts generated:")
-    print("  Markdown:    ARCHITECTURE.md")
-    print("  Interactive: repograph.html & index.html\n")
+    print(f"  Markdown:    {arch_md_path}")
+    if not args.no_html:
+        print(f"  Interactive: {output_dir / 'index.html'} & {output_dir / 'repograph.html'}\n")
 
-    if should_serve:
-        serve_directory()
+    if args.serve:
+        serve_directory(port=args.port, target_dir=str(output_dir), open_browser=not args.no_browser)
+
 
 if __name__ == "__main__":
     main()

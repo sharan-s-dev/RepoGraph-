@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run unit test suite
+        run: |
+          python -m unittest discover tests
+
+      - name: Test CLI execution on demo project
+        run: |
+          python repograph.py demo_project -o ./output_ci --name "demo_project"
+          python -c "from pathlib import Path; assert (Path('output_ci') / 'index.html').exists()"
+          python -c "from pathlib import Path; assert (Path('output_ci') / 'ARCHITECTURE.md').exists()"
+
+      - name: Test CLI flags
+        run: |
+          python repograph.py --help
+          python repograph.py --version
+          python repograph.py demo_project --json
+
+      - name: Test editable installation
+        run: |
+          python -m pip install -e .
+          repograph --version

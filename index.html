@@ -23,6 +23,7 @@
       --emerald: #10b981;
       --emerald-glow: rgba(16, 185, 129, 0.25);
       --amber: #f59e0b;
+      --crimson: #ef4444;
       --indigo: #818cf8;
       --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
@@ -114,6 +115,36 @@
       box-shadow: 0 0 8px var(--emerald);
     }
 
+    .cycle-pill-nav {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      transition: all 0.2s ease;
+    }
+
+    .cycle-pill-warn {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+    .cycle-pill-warn:hover {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: #ef4444;
+      color: #ffffff;
+    }
+
+    .cycle-pill-ok {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+
     .btn {
       background: var(--bg-surface-elevated);
       color: var(--text-main);
@@ -157,7 +188,7 @@
     }
 
     aside.sidebar {
-      width: 310px;
+      width: 320px;
       background: rgba(12, 17, 29, 0.9);
       backdrop-filter: blur(12px);
       border-right: 1px solid var(--border);
@@ -234,6 +265,27 @@
       color: #ffffff;
       font-family: var(--font-mono);
       margin-top: 1px;
+    }
+
+    .cycle-alert-bar {
+      margin: 8px 12px 2px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      font-size: 11.5px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .cycle-alert-bar:hover {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: #ef4444;
+      color: #ffffff;
     }
 
     .layer-filters {
@@ -313,7 +365,6 @@
       border: 1px solid rgba(56, 189, 248, 0.2);
     }
 
-    /* Viewport & Native Absolute Transform Pan/Zoom Canvas */
     main.viewport {
       flex: 1;
       position: relative;
@@ -348,7 +399,6 @@
       filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.5));
     }
 
-    /* Floating Viewport Controls */
     .viewport-controls {
       position: absolute;
       top: 14px;
@@ -399,20 +449,30 @@
       position: absolute;
       bottom: 14px;
       left: 14px;
-      background: rgba(12, 17, 29, 0.85);
+      background: rgba(12, 17, 29, 0.9);
       backdrop-filter: blur(8px);
-      padding: 5px 12px;
+      padding: 6px 14px;
       border-radius: 20px;
-      font-size: 11px;
+      font-size: 11.5px;
       color: var(--text-muted);
       border: 1px solid var(--border);
       pointer-events: none;
       z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
-    /* Inspector Drawer */
+    .legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+
     aside.inspector {
-      width: 340px;
+      width: 360px;
       background: rgba(12, 17, 29, 0.96);
       backdrop-filter: blur(16px);
       border-left: 1px solid var(--border);
@@ -458,6 +518,44 @@
       font-weight: 600;
     }
 
+    .class-card {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+    }
+
+    .class-header {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: #f8fafc;
+      margin-bottom: 4px;
+    }
+
+    .class-kw {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    .class-bases {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
+    .class-methods {
+      margin-top: 4px;
+      padding-left: 8px;
+      border-left: 2px solid #1e293b;
+    }
+
+    .method-sig {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #cbd5e1;
+      margin: 2px 0;
+    }
+
     .symbol-pill {
       display: inline-block;
       padding: 3px 7px;
@@ -468,6 +566,30 @@
       font-size: 11px;
       font-family: var(--font-mono);
       color: #38bdf8;
+    }
+
+    .ext-pill {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px 4px 4px 0;
+      border-radius: 4px;
+      background: rgba(129, 140, 248, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #c7d2fe;
+    }
+
+    .stdlib-pill {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 2px 3px 3px 0;
+      border-radius: 4px;
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: #94a3b8;
     }
 
     .dep-link {
@@ -491,7 +613,7 @@
       background: #131b2e;
     }
 
-    /* Architecture Overview Modal */
+    /* Modals */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -512,7 +634,7 @@
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      max-width: 620px;
+      max-width: 640px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
@@ -544,6 +666,25 @@
       font-size: 12px;
       color: var(--text-muted);
       line-height: 1.45;
+    }
+
+    .cycle-card {
+      background: #090d16;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 8px;
+    }
+
+    .cycle-chain {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #fca5a5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.5;
     }
 
     #toast {
@@ -585,7 +726,9 @@
         <span class="status-dot"></span>
         <span>Deterministic AST Engine</span>
       </div>
-      
+
+      <div id="cycles-nav-badge"></div>
+
       <button class="btn" onclick="openOverviewModal()">
         <span>Overview</span>
       </button>
@@ -632,6 +775,8 @@
         </div>
       </div>
 
+      <div id="cycles-sidebar-container"></div>
+
       <div class="layer-filters" id="layer-filters">
         <span class="layer-chip active" onclick="filterByLayer('ALL')">All</span>
       </div>
@@ -655,7 +800,10 @@
       </div>
 
       <div class="hint-chip">
-        Drag to Pan &bull; Scroll to Zoom &bull; Click Node to Inspect &bull; ⇄ to Switch Orientation
+        <span><span class="legend-dot" style="background:#38bdf8;"></span>Selected</span>
+        <span><span class="legend-dot" style="background:#10b981;"></span>Inbound Caller</span>
+        <span><span class="legend-dot" style="background:#06b6d4;"></span>Outbound Dependency</span>
+        <span>&bull; Drag to Pan &bull; Scroll to Zoom</span>
       </div>
     </main>
 
@@ -671,7 +819,7 @@
       <div class="inspector-body">
         <div>
           <div class="section-title">Module Summary</div>
-          <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.4;" id="insp-doc"></p>
+          <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.45;" id="insp-doc"></p>
         </div>
 
         <div>
@@ -689,7 +837,7 @@
         </div>
 
         <div id="insp-classes-section">
-          <div class="section-title">Classes Defined</div>
+          <div class="section-title">Classes & Methods</div>
           <div id="insp-classes"></div>
         </div>
 
@@ -699,22 +847,33 @@
         </div>
 
         <div>
-          <div class="section-title">Outbound Dependencies (Imports)</div>
+          <div class="section-title">Outbound Internal Dependencies</div>
           <div id="insp-deps"></div>
         </div>
 
         <div>
-          <div class="section-title">Inbound Dependencies (Imported By)</div>
+          <div class="section-title">Inbound Callers (Imported By)</div>
           <div id="insp-imported-by"></div>
+        </div>
+
+        <div id="insp-ext-section">
+          <div class="section-title">External / Third-Party Packages</div>
+          <div id="insp-ext"></div>
+        </div>
+
+        <div id="insp-stdlib-section">
+          <div class="section-title">Standard Library Dependencies</div>
+          <div id="insp-stdlib"></div>
         </div>
       </div>
     </aside>
   </div>
 
+  <!-- Architecture Overview Modal -->
   <div class="modal-overlay" id="overview-modal" onclick="closeOverviewModalOnOut(event)">
     <div class="modal-dialog">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>Architecture Overview</h3>
+        <h3>Architecture Overview: demo_project</h3>
         <button class="control-btn" onclick="closeOverviewModal()">✕</button>
       </div>
       <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
@@ -742,10 +901,29 @@
     </div>
   </div>
 
-  <div id="toast">Mermaid diagram copied to clipboard!</div>
+  <!-- Circular Dependencies Modal -->
+  <div class="modal-overlay" id="cycles-modal" onclick="closeCyclesModalOnOut(event)">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#f87171;">Circular Dependencies Detected</h3>
+        <button class="control-btn" onclick="closeCyclesModal()">✕</button>
+      </div>
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
+        Circular import chains introduce runtime `ImportError` exceptions and tight architectural coupling.
+      </p>
+
+      <div id="cycles-list-container" style="margin-top: 12px;"></div>
+
+      <div style="margin-top: 16px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeCyclesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">Diagram copied to clipboard!</div>
 
   <script>
-    const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start()"], "bases": []}}, "functions": ["start()"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "bases": []}}, "functions": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": []}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "bases": []}}, "functions": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"]}, "UserModel": {"methods": ["to_dict()"], "bases": []}}, "functions": ["to_dict()"], "all_functions_count": 1, "internal_dependencies": [], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret(value)", "generate_token(prefix)"], "all_functions_count": 2, "internal_dependencies": [], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
+    const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "full_docstring": "Demo Application Entry Point.\nInitializes the HTTP server and coordinates core services.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start()"], "bases": [], "docstring": "Main application lifecycle controller."}}, "functions": ["start()"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "full_docstring": "API Routing & Request Handlers.\nExposes endpoints for user authentication and transaction processing.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "bases": [], "docstring": ""}}, "functions": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "full_docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": [], "docstring": ""}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["os"], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "full_docstring": "Core Workflow Execution Engine.\nOrchestrates domain validation, cryptographic verification, and state transitions.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "bases": [], "docstring": ""}}, "functions": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "full_docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"], "docstring": ""}, "UserModel": {"methods": ["to_dict()"], "bases": [], "docstring": ""}}, "functions": ["to_dict()"], "all_functions_count": 1, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["enum"], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "full_docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret(value)", "generate_token(prefix)"], "all_functions_count": 2, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["hashlib", "secrets"], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
     const CYCLES = [];
     const MERMAID_TD = "graph TD\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
     const MERMAID_LR = "graph LR\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
@@ -869,13 +1047,8 @@
       viewport.classList.remove("is-dragging");
     });
 
-    function zoomIn() {
-      zoomAtCenter(1.25);
-    }
-
-    function zoomOut() {
-      zoomAtCenter(0.8);
-    }
+    function zoomIn() { zoomAtCenter(1.25); }
+    function zoomOut() { zoomAtCenter(0.8); }
 
     function zoomAtCenter(factor) {
       const cx = viewport.clientWidth / 2;
@@ -887,9 +1060,7 @@
       updateTransform(true);
     }
 
-    function resetZoom() {
-      fitToScreen(true);
-    }
+    function resetZoom() { fitToScreen(true); }
 
     function fitToScreen(smooth = true) {
       const svgEl = panLayer.querySelector("svg");
@@ -915,7 +1086,6 @@
         } catch(e) {}
       }
 
-      // Standardize size
       svgEl.style.width = svgW + "px";
       svgEl.style.height = svgH + "px";
       svgEl.style.maxWidth = "none";
@@ -928,7 +1098,7 @@
       const scaleX = availW / svgW;
       const scaleY = availH / svgH;
       scale = Math.min(scaleX, scaleY);
-      scale = Math.min(Math.max(scale, 0.25), 1.25);
+      scale = Math.min(Math.max(scale, 0.2), 1.25);
 
       translateX = (vpW - svgW * scale) / 2;
       translateY = (vpH - svgH * scale) / 2;
@@ -942,7 +1112,7 @@
       showToast("Switched to " + (currentDirection === "TD" ? "Top-Down" : "Left-to-Right") + " view");
     }
 
-    // --- MERMAID RENDERING & INTERACTION ---
+    // --- MERMAID RENDERING & BIDIRECTIONAL PATHWAY LIGHTING ---
     mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
@@ -994,7 +1164,7 @@
           for (const [file, data] of Object.entries(SUMMARY)) {
             if (data.id === cleanId || node.id.includes(data.id)) {
               inspectModule(file);
-              highlightNodeConnections(data.id);
+              highlightNodeConnections(file);
               break;
             }
           }
@@ -1008,30 +1178,136 @@
       });
     }
 
-    function highlightNodeConnections(nodeId) {
+    // TRUE PATHWAY LIGHTING: Selected = Blue, Inbound = Emerald Green, Outbound = Cyan
+    function highlightNodeConnections(fileOrId) {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
+
+      let targetData = SUMMARY[fileOrId];
+      if (!targetData) {
+        targetData = Object.values(SUMMARY).find(d => d.id === fileOrId);
+      }
+      if (!targetData) return;
+
+      const targetId = targetData.id;
+      const inboundIds = new Set((targetData.imported_by || []).map(f => SUMMARY[f]?.id).filter(Boolean));
+      const outboundIds = new Set((targetData.internal_dependencies || []).map(f => SUMMARY[f]?.id).filter(Boolean));
 
       const nodes = svg.querySelectorAll(".node");
       const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
 
       nodes.forEach(n => {
-        if (n.id.includes(nodeId)) {
+        const nId = n.id || "";
+        const shape = n.querySelector("rect, polygon, circle, path");
+
+        if (nId.includes(targetId)) {
+          // Selected Node
           n.style.opacity = "1";
-          n.style.filter = "drop-shadow(0 0 10px #38bdf8)";
+          n.style.filter = "drop-shadow(0 0 12px #38bdf8)";
+          if (shape) {
+            shape.style.stroke = "#38bdf8";
+            shape.style.strokeWidth = "2.5px";
+          }
+        } else if (Array.from(inboundIds).some(id => nId.includes(id))) {
+          // Inbound Callers -> Emerald Green
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #10b981)";
+          if (shape) {
+            shape.style.stroke = "#10b981";
+            shape.style.strokeWidth = "2.5px";
+          }
+        } else if (Array.from(outboundIds).some(id => nId.includes(id))) {
+          // Outbound Dependencies -> Cyan
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 10px #06b6d4)";
+          if (shape) {
+            shape.style.stroke = "#06b6d4";
+            shape.style.strokeWidth = "2.5px";
+          }
         } else {
-          n.style.opacity = "0.22";
+          n.style.opacity = "0.15";
           n.style.filter = "none";
+          if (shape) {
+            shape.style.stroke = "";
+            shape.style.strokeWidth = "";
+          }
         }
       });
 
       edges.forEach(e => {
-        if (e.id && e.id.includes(nodeId)) {
+        const eId = e.id || "";
+        const pathEl = e.querySelector("path");
+
+        const isInbound = Array.from(inboundIds).some(id => eId.includes(id) && eId.includes(targetId));
+        const isOutbound = Array.from(outboundIds).some(id => eId.includes(id) && eId.includes(targetId));
+
+        if (isInbound) {
           e.style.opacity = "1";
+          if (pathEl) {
+            pathEl.style.stroke = "#10b981";
+            pathEl.style.strokeWidth = "2.5px";
+          }
+        } else if (isOutbound) {
+          e.style.opacity = "1";
+          if (pathEl) {
+            pathEl.style.stroke = "#06b6d4";
+            pathEl.style.strokeWidth = "2.5px";
+          }
         } else {
-          e.style.opacity = "0.12";
+          e.style.opacity = "0.08";
+          if (pathEl) {
+            pathEl.style.stroke = "";
+            pathEl.style.strokeWidth = "";
+          }
         }
       });
+    }
+
+    function highlightCycle(cycleNodes) {
+      closeCyclesModal();
+      const svg = panLayer.querySelector("svg");
+      if (!svg) return;
+
+      const cycleIds = new Set(cycleNodes.map(f => SUMMARY[f]?.id).filter(Boolean));
+      const nodes = svg.querySelectorAll(".node");
+      const edges = svg.querySelectorAll(".edgePath, .edgeLabel");
+
+      nodes.forEach(n => {
+        const nId = n.id || "";
+        const shape = n.querySelector("rect, polygon, circle, path");
+        if (Array.from(cycleIds).some(id => nId.includes(id))) {
+          n.style.opacity = "1";
+          n.style.filter = "drop-shadow(0 0 12px #ef4444)";
+          if (shape) {
+            shape.style.stroke = "#ef4444";
+            shape.style.strokeWidth = "3px";
+          }
+        } else {
+          n.style.opacity = "0.12";
+          n.style.filter = "none";
+          if (shape) {
+            shape.style.stroke = "";
+            shape.style.strokeWidth = "";
+          }
+        }
+      });
+
+      edges.forEach(e => {
+        const eId = e.id || "";
+        const pathEl = e.querySelector("path");
+        const inCycle = Array.from(cycleIds).some(id1 => Array.from(cycleIds).some(id2 => id1 !== id2 && eId.includes(id1) && eId.includes(id2)));
+        if (inCycle) {
+          e.style.opacity = "1";
+          if (pathEl) {
+            pathEl.style.stroke = "#ef4444";
+            pathEl.style.strokeWidth = "3px";
+          }
+        } else {
+          e.style.opacity = "0.05";
+        }
+      });
+
+      showToast("Highlighting circular dependency in red");
     }
 
     function resetHighlights() {
@@ -1040,6 +1316,11 @@
       svg.querySelectorAll(".node, .edgePath, .edgeLabel").forEach(el => {
         el.style.opacity = "1";
         el.style.filter = "none";
+        const shape = el.querySelector("rect, polygon, circle, path");
+        if (shape) {
+          shape.style.stroke = "";
+          shape.style.strokeWidth = "";
+        }
       });
     }
 
@@ -1057,7 +1338,7 @@
         item.id = `mod-item-${data.id}`;
         item.onclick = () => {
           inspectModule(file);
-          highlightNodeConnections(data.id);
+          highlightNodeConnections(file);
         };
 
         item.innerHTML = `
@@ -1080,7 +1361,59 @@
         filterContainer.appendChild(chip);
       });
 
+      initCyclesUI();
       populateOverviewModal();
+    }
+
+    function initCyclesUI() {
+      const navBadge = document.getElementById("cycles-nav-badge");
+      const sidebarContainer = document.getElementById("cycles-sidebar-container");
+      const modalList = document.getElementById("cycles-list-container");
+
+      if (CYCLES && CYCLES.length > 0) {
+        navBadge.innerHTML = `
+          <div class="cycle-pill-nav cycle-pill-warn" onclick="openCyclesModal()">
+            <span>⚠️</span>
+            <span>${CYCLES.length} Circular Dependencies</span>
+          </div>
+        `;
+
+        sidebarContainer.innerHTML = `
+          <div class="cycle-alert-bar" onclick="openCyclesModal()">
+            <span>⚠️ ${CYCLES.length} Circular Imports Detected</span>
+            <span style="font-size:10px; text-decoration:underline;">View</span>
+          </div>
+        `;
+
+        modalList.innerHTML = CYCLES.map((cycle, i) => {
+          const chainHtml = cycle.map((node, idx) => `
+            <span>${node}</span>
+            ${idx < cycle.length - 1 ? '<span style="color:#ef4444; font-weight:700;">➔</span>' : ''}
+          `).join('');
+
+          return `
+            <div class="cycle-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle #${i+1} (${cycle.length - 1} steps)</span>
+                <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${JSON.stringify(cycle)})'>
+                  Highlight in Graph
+                </button>
+              </div>
+              <div class="cycle-chain">
+                ${chainHtml}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        navBadge.innerHTML = `
+          <div class="cycle-pill-nav cycle-pill-ok">
+            <span>✓</span>
+            <span>0 Circular Dependencies</span>
+          </div>
+        `;
+        sidebarContainer.innerHTML = '';
+      }
     }
 
     function filterByLayer(layer) {
@@ -1122,18 +1455,37 @@
 
       document.getElementById("insp-file").innerText = file;
       document.getElementById("insp-layer").innerText = data.layer;
-      document.getElementById("insp-doc").innerText = data.docstring || "No module docstring specified.";
+      document.getElementById("insp-doc").innerText = data.full_docstring || data.docstring || "No module docstring specified.";
       document.getElementById("insp-loc").innerText = data.loc;
       document.getElementById("insp-complexity").innerText = data.complexity;
 
+      // Rich Class Details with Bases and Public Methods
       const clsContainer = document.getElementById("insp-classes");
       if (data.classes.length > 0) {
         document.getElementById("insp-classes-section").style.display = "block";
-        clsContainer.innerHTML = data.classes.map(c => `<span class="symbol-pill">${c}</span>`).join("");
+        clsContainer.innerHTML = data.classes.map(c => {
+          const details = data.class_details?.[c];
+          const bases = details?.bases?.length ? `(${details.bases.join(', ')})` : '';
+          const methods = details?.methods?.length 
+            ? details.methods.map(m => `<div class="method-sig"><code>${m}</code></div>`).join('') 
+            : '<div style="font-size:11px; color:var(--text-faint); margin:2px 0;">No public methods</div>';
+
+          return `
+            <div class="class-card">
+              <div class="class-header">
+                <span class="class-kw">class</span> <strong style="color:#ffffff;">${c}</strong> <span class="class-bases">${bases}</span>
+              </div>
+              <div class="class-methods">
+                ${methods}
+              </div>
+            </div>
+          `;
+        }).join("");
       } else {
         document.getElementById("insp-classes-section").style.display = "none";
       }
 
+      // Public Functions
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {
         document.getElementById("insp-functions-section").style.display = "block";
@@ -1142,10 +1494,11 @@
         document.getElementById("insp-functions-section").style.display = "none";
       }
 
+      // Outbound Internal Dependencies
       const depsContainer = document.getElementById("insp-deps");
       if (data.internal_dependencies.length > 0) {
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${SUMMARY[d]?.id}');">
+          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${d}');">
             <span>↳ ${d}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
@@ -1154,16 +1507,35 @@
         depsContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Standalone (No internal dependencies)</span>`;
       }
 
+      // Inbound Callers
       const impByContainer = document.getElementById("insp-imported-by");
       if (data.imported_by && data.imported_by.length > 0) {
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${SUMMARY[ib]?.id}');">
+          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${ib}');">
             <span>↲ ${ib}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
         `).join("");
       } else {
         impByContainer.innerHTML = `<span style="font-size:11.5px; color:var(--text-faint);">Not imported by internal modules</span>`;
+      }
+
+      // External Dependencies
+      const extContainer = document.getElementById("insp-ext");
+      if (data.external_dependencies && data.external_dependencies.length > 0) {
+        document.getElementById("insp-ext-section").style.display = "block";
+        extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${e}</span>`).join("");
+      } else {
+        document.getElementById("insp-ext-section").style.display = "none";
+      }
+
+      // Standard Library
+      const stdlibContainer = document.getElementById("insp-stdlib");
+      if (data.stdlib_dependencies && data.stdlib_dependencies.length > 0) {
+        document.getElementById("insp-stdlib-section").style.display = "block";
+        stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${s}</span>`).join("");
+      } else {
+        document.getElementById("insp-stdlib-section").style.display = "none";
       }
 
       document.getElementById("inspector-drawer").classList.add("open");
@@ -1197,6 +1569,10 @@
     function closeOverviewModal() { document.getElementById("overview-modal").classList.remove("active"); }
     function closeOverviewModalOnOut(e) { if (e.target.id === "overview-modal") closeOverviewModal(); }
 
+    function openCyclesModal() { document.getElementById("cycles-modal").classList.add("active"); }
+    function closeCyclesModal() { document.getElementById("cycles-modal").classList.remove("active"); }
+    function closeCyclesModalOnOut(e) { if (e.target.id === "cycles-modal") closeCyclesModal(); }
+
     function showToast(msg) {
       const t = document.getElementById("toast");
       t.innerText = msg;
@@ -1216,7 +1592,13 @@
     function downloadMarkdown() {
       const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
       const ticks = "```";
-      const content = "# Architecture Overview: " + REPO_NAME + "\n\n" + ticks + "mermaid\n" + rawCode + "\n" + ticks + "\n";
+      let content = "# Architecture Overview: " + REPO_NAME + "\n\n" + ticks + "mermaid\n" + rawCode + "\n" + ticks + "\n";
+      if (CYCLES && CYCLES.length > 0) {
+        content += "\n> [!WARNING]\n> **Circular Dependencies Detected:**\n";
+        CYCLES.forEach((c, idx) => {
+          content += "> - Cycle " + (idx + 1) + ": `" + c.join(" ➔ ") + "`\n";
+        });
+      }
       const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1230,8 +1612,26 @@
     function downloadSVG() {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+      const styleEl = document.createElement("style");
+      styleEl.textContent = `
+        .node rect, .node circle, .node ellipse, .node polygon, .node path { fill: #0f172a; stroke: #64748b; stroke-width: 1.5px; }
+        .node .label text, .node text { fill: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
+        .edgePath path { stroke: #38bdf8; stroke-width: 1.5px; fill: none; }
+        .edgeLabel text { fill: #94a3b8; font-family: monospace; font-size: 11px; }
+        .cluster rect { fill: #0b1120; stroke: #1e293b; stroke-width: 1px; stroke-dasharray: 4 4; }
+        .cluster text { fill: #94a3b8; font-family: -apple-system, sans-serif; font-weight: 600; font-size: 12px; }
+      `;
+      clone.insertBefore(styleEl, clone.firstChild);
+
       const serializer = new XMLSerializer();
-      const source = serializer.serializeToString(svg);
+      let source = serializer.serializeToString(clone);
+      if (!source.match(/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
       const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1246,6 +1646,7 @@
       if (e.key === "Escape") {
         closeInspector();
         closeOverviewModal();
+        closeCyclesModal();
       } else if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         document.getElementById("module-search")?.focus();
@@ -1257,6 +1658,8 @@
         fitToScreen(true);
       } else if (e.key.toLowerCase() === "t") {
         toggleLayout();
+      } else if (e.key.toLowerCase() === "c" && CYCLES.length > 0) {
+        openCyclesModal();
       }
     });
 
@@ -1264,7 +1667,6 @@
       fitToScreen(false);
     });
 
-    // Kick off
     initSidebar();
     renderMermaidDiagram();
   </script>
