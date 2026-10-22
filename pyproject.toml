@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repograph"
-version = "1.0.0"
-description = "Fast, deterministic codebase architecture & dependency graph explorer for Python."
+version = "1.1.0"
+description = "Fast, deterministic codebase architecture explorer + Google Gemma open-weight AI architect engine."
 readme = "README.md"
 authors = [
     { name = "Sharan S" }
 ]
 license = { text = "MIT" }
 requires-python = ">=3.9"
-keywords = ["architecture", "ast", "dependency-graph", "visualization", "mermaid", "code-analysis"]
+keywords = ["architecture", "ast", "dependency-graph", "visualization", "mermaid", "code-analysis", "gemma", "gemma2", "ai"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
