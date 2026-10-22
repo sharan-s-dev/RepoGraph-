@@ -24,6 +24,8 @@
       --emerald-glow: rgba(16, 185, 129, 0.25);
       --amber: #f59e0b;
       --crimson: #ef4444;
+      --purple: #8b5cf6;
+      --purple-glow: rgba(139, 92, 246, 0.35);
       --indigo: #818cf8;
       --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
@@ -165,6 +167,20 @@
     .btn:hover {
       background: #1e293b;
       border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .btn-ai {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border: 1px solid #a78bfa;
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 0 12px var(--purple-glow);
+    }
+
+    .btn-ai:hover {
+      background: linear-gradient(135deg, #6d28d9, #4338ca);
+      box-shadow: 0 0 18px var(--purple-glow);
       color: #ffffff;
     }
 
@@ -634,12 +650,12 @@
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      max-width: 640px;
+      max-width: 680px;
       width: 100%;
       max-height: 85vh;
       overflow-y: auto;
       box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-      padding: 20px;
+      padding: 22px;
       position: relative;
     }
 
@@ -666,6 +682,32 @@
       font-size: 12px;
       color: var(--text-muted);
       line-height: 1.45;
+    }
+
+    .pattern-card {
+      background: #090d16;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 8px;
+    }
+
+    .pattern-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #c4b5fd;
+      margin-bottom: 3px;
+    }
+
+    .health-badge {
+      padding: 3px 10px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
     }
 
     .cycle-card {
@@ -724,10 +766,14 @@
     <div class="nav-actions">
       <div class="status-pill">
         <span class="status-dot"></span>
-        <span>Deterministic AST Engine</span>
+        <span>Deterministic AST</span>
       </div>
 
       <div id="cycles-nav-badge"></div>
+
+      <button class="btn btn-ai" onclick="openGemmaModal()">
+        <span>🤖 Gemma AI Architect</span>
+      </button>
 
       <button class="btn" onclick="openOverviewModal()">
         <span>Overview</span>
@@ -822,6 +868,11 @@
           <p style="font-size: 12.5px; color: var(--text-muted); line-height: 1.45;" id="insp-doc"></p>
         </div>
 
+        <div id="insp-gemma-section">
+          <div class="section-title" style="color:#c4b5fd;">🤖 Gemma Architectural Role</div>
+          <div id="insp-gemma-role" style="font-size: 12px; color: #e2e8f0; line-height: 1.4; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 6px; padding: 8px 10px;"></div>
+        </div>
+
         <div>
           <div class="section-title">Code Metrics</div>
           <div style="display: flex; gap: 8px;">
@@ -867,6 +918,54 @@
         </div>
       </div>
     </aside>
+  </div>
+
+  <!-- Gemma AI Architect Modal -->
+  <div class="modal-overlay" id="gemma-modal" onclick="closeGemmaModalOnOut(event)">
+    <div class="modal-dialog">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">🤖</span>
+          <div>
+            <h3 style="color:#c4b5fd;">Gemma AI Architect Analysis</h3>
+            <p style="font-size:11px; color:var(--text-muted);" id="gemma-engine-tag">Powered by Google Gemma 2 (Open-Weight Model)</p>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="health-badge" id="gemma-health-badge">Health: A</span>
+          <button class="control-btn" onclick="closeGemmaModal()">✕</button>
+        </div>
+      </div>
+
+      <div class="guide-step" style="border-color: rgba(139, 92, 246, 0.4);">
+        <h4 style="color:#c4b5fd;">Executive Architecture Narrative</h4>
+        <p id="gemma-exec-summary" style="font-size:12.5px; line-height:1.5; color:#f1f5f9;"></p>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="section-title" style="color:#a78bfa;">Identified Design Patterns</div>
+        <div id="gemma-patterns-list"></div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="section-title" style="color:#38bdf8;">Modularity & Health Analysis</div>
+        <p id="gemma-modularity-text" style="font-size:12px; color:var(--text-muted); line-height:1.45;"></p>
+      </div>
+
+      <div id="gemma-cycle-remedy-section" style="margin-top:14px; display:none;">
+        <div class="section-title" style="color:#ef4444;">AI Circular Import Decoupling Recipes</div>
+        <div id="gemma-cycle-remedies"></div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="section-title" style="color:#34d399;">Architectural Decoupling Recommendations</div>
+        <ul id="gemma-recs-list" style="padding-left:18px; font-size:12px; color:var(--text-muted); line-height:1.5;"></ul>
+      </div>
+
+      <div style="margin-top: 18px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeGemmaModal()">Back to Blueprint</button>
+      </div>
+    </div>
   </div>
 
   <!-- Architecture Overview Modal -->
@@ -925,6 +1024,7 @@
   <script>
     const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "full_docstring": "Demo Application Entry Point.\nInitializes the HTTP server and coordinates core services.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start()"], "bases": [], "docstring": "Main application lifecycle controller."}}, "functions": ["start()"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "full_docstring": "API Routing & Request Handlers.\nExposes endpoints for user authentication and transaction processing.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "bases": [], "docstring": ""}}, "functions": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "full_docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": [], "docstring": ""}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["os"], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "full_docstring": "Core Workflow Execution Engine.\nOrchestrates domain validation, cryptographic verification, and state transitions.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "bases": [], "docstring": ""}}, "functions": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "full_docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"], "docstring": ""}, "UserModel": {"methods": ["to_dict()"], "bases": [], "docstring": ""}}, "functions": ["to_dict()"], "all_functions_count": 1, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["enum"], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "full_docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret(value)", "generate_token(prefix)"], "all_functions_count": 2, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["hashlib", "secrets"], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
     const CYCLES = [];
+    const AI_ANALYSIS = {"engine": "Google Gemma 2 (gemma2:2b Architecture Engine)", "mode": "offline-synthesis", "health_score": "A", "executive_summary": "**demo_project** exhibits a structured **Clean N-Tier Layered Architecture** architecture comprising 6 Python modules across 6 functional layers. Execution coordinates through clear boundaries (API & Interface, Application Entry, Configuration), delivering high operational cohesion with 7 cross-module dependency links.", "modularity_analysis": "Exceptional decoupling. Strict acyclic dependency flow with well-balanced fan-in and fan-out.", "design_patterns": [{"name": "Clean N-Tier Layered Architecture", "description": "Strict separation between interface endpoints, core business orchestrator, and persistent entity storage."}, {"name": "Dispatcher & Facade Pattern", "description": "Centralized interface routing layer that encapsulates endpoint dispatching from domain execution."}, {"name": "Core Domain Workflow Orchestrator", "description": "Encapsulated business logic coordinator driving application operations and managing state transitions."}, {"name": "Data Entity & Domain Model", "description": "Explicit entity classes encapsulating attributes and schema invariants."}, {"name": "Stateless Shared Service Provider", "description": "Shared utility helpers providing reusable cryptographic, string, or mathematical primitives."}], "recommendations": ["Preserve downward dependency flows: enforce that 'API & Interface' only calls into lower tiers, never in reverse.", "Maintain zero circular imports to guarantee sub-millisecond cold start times and clean unit test isolation."], "circular_dependency_fixes": [], "module_roles": {"app.py": "System entry point & bootstrap controller.", "api/routes.py": "Endpoint dispatcher and request routing interface.", "config/settings.py": "Application configuration and environment parameters.", "core/engine.py": "Core domain orchestrator executing primary business logic.", "models/user.py": "Domain entity model managing structured state.", "utils/crypto.py": "Reusable stateless shared utility primitives."}};
     const MERMAID_TD = "graph TD\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
     const MERMAID_LR = "graph LR\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
     const REPO_NAME = "demo_project";
@@ -1178,7 +1278,6 @@
       });
     }
 
-    // TRUE PATHWAY LIGHTING: Selected = Blue, Inbound = Emerald Green, Outbound = Cyan
     function highlightNodeConnections(fileOrId) {
       const svg = panLayer.querySelector("svg");
       if (!svg) return;
@@ -1201,7 +1300,6 @@
         const shape = n.querySelector("rect, polygon, circle, path");
 
         if (nId.includes(targetId)) {
-          // Selected Node
           n.style.opacity = "1";
           n.style.filter = "drop-shadow(0 0 12px #38bdf8)";
           if (shape) {
@@ -1209,7 +1307,6 @@
             shape.style.strokeWidth = "2.5px";
           }
         } else if (Array.from(inboundIds).some(id => nId.includes(id))) {
-          // Inbound Callers -> Emerald Green
           n.style.opacity = "1";
           n.style.filter = "drop-shadow(0 0 10px #10b981)";
           if (shape) {
@@ -1217,7 +1314,6 @@
             shape.style.strokeWidth = "2.5px";
           }
         } else if (Array.from(outboundIds).some(id => nId.includes(id))) {
-          // Outbound Dependencies -> Cyan
           n.style.opacity = "1";
           n.style.filter = "drop-shadow(0 0 10px #06b6d4)";
           if (shape) {
@@ -1362,7 +1458,45 @@
       });
 
       initCyclesUI();
+      initGemmaUI();
       populateOverviewModal();
+    }
+
+    function initGemmaUI() {
+      if (!AI_ANALYSIS) return;
+      document.getElementById("gemma-health-badge").innerText = "Health: " + (AI_ANALYSIS.health_score || "A");
+      document.getElementById("gemma-engine-tag").innerText = AI_ANALYSIS.engine || "Powered by Google Gemma 2";
+      document.getElementById("gemma-exec-summary").innerHTML = (AI_ANALYSIS.executive_summary || "").replace(/\n/g, '<br>');
+      document.getElementById("gemma-modularity-text").innerText = AI_ANALYSIS.modularity_analysis || "";
+
+      const patternsList = document.getElementById("gemma-patterns-list");
+      if (AI_ANALYSIS.design_patterns && AI_ANALYSIS.design_patterns.length > 0) {
+        patternsList.innerHTML = AI_ANALYSIS.design_patterns.map(p => `
+          <div class="pattern-card">
+            <div class="pattern-title">${p.name}</div>
+            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">${p.description}</div>
+          </div>
+        `).join('');
+      } else {
+        patternsList.innerHTML = '<span style="font-size:12px; color:var(--text-faint);">Modular decoupled design.</span>';
+      }
+
+      const recsList = document.getElementById("gemma-recs-list");
+      if (AI_ANALYSIS.recommendations && AI_ANALYSIS.recommendations.length > 0) {
+        recsList.innerHTML = AI_ANALYSIS.recommendations.map(r => `<li style="margin-bottom:4px;">${r}</li>`).join('');
+      }
+
+      if (AI_ANALYSIS.circular_dependency_fixes && AI_ANALYSIS.circular_dependency_fixes.length > 0) {
+        const remedySec = document.getElementById("gemma-cycle-remedy-section");
+        remedySec.style.display = "block";
+        document.getElementById("gemma-cycle-remedies").innerHTML = AI_ANALYSIS.circular_dependency_fixes.map(f => `
+          <div class="cycle-card" style="border-color:rgba(239, 68, 68, 0.4);">
+            <div style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle: ${f.cycle}</div>
+            <div style="font-size:11.5px; color:#fecaca; margin-top:2px;">Root cause: ${f.root_cause}</div>
+            <div style="font-size:11px; color:#94a3b8; margin-top:4px; white-space:pre-line; line-height:1.4;">${f.remediation_recipe}</div>
+          </div>
+        `).join('');
+      }
     }
 
     function initCyclesUI() {
@@ -1458,6 +1592,16 @@
       document.getElementById("insp-doc").innerText = data.full_docstring || data.docstring || "No module docstring specified.";
       document.getElementById("insp-loc").innerText = data.loc;
       document.getElementById("insp-complexity").innerText = data.complexity;
+
+      // Gemma Architectural Role
+      const roleSection = document.getElementById("insp-gemma-section");
+      const roleText = document.getElementById("insp-gemma-role");
+      if (AI_ANALYSIS && AI_ANALYSIS.module_roles && AI_ANALYSIS.module_roles[file]) {
+        roleSection.style.display = "block";
+        roleText.innerText = AI_ANALYSIS.module_roles[file];
+      } else {
+        roleSection.style.display = "none";
+      }
 
       // Rich Class Details with Bases and Public Methods
       const clsContainer = document.getElementById("insp-classes");
@@ -1565,6 +1709,10 @@
         : `Internal library or pipeline without separate HTTP endpoints.`;
     }
 
+    function openGemmaModal() { document.getElementById("gemma-modal").classList.add("active"); }
+    function closeGemmaModal() { document.getElementById("gemma-modal").classList.remove("active"); }
+    function closeGemmaModalOnOut(e) { if (e.target.id === "gemma-modal") closeGemmaModal(); }
+
     function openOverviewModal() { document.getElementById("overview-modal").classList.add("active"); }
     function closeOverviewModal() { document.getElementById("overview-modal").classList.remove("active"); }
     function closeOverviewModalOnOut(e) { if (e.target.id === "overview-modal") closeOverviewModal(); }
@@ -1593,6 +1741,20 @@
       const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
       const ticks = "```";
       let content = "# Architecture Overview: " + REPO_NAME + "\n\n" + ticks + "mermaid\n" + rawCode + "\n" + ticks + "\n";
+      
+      if (AI_ANALYSIS) {
+        content += "\n## 🤖 AI Architecture Analysis (Powered by Google Gemma)\n\n";
+        content += "### Executive Summary\n" + AI_ANALYSIS.executive_summary + "\n\n";
+        content += "### Architecture Health: " + (AI_ANALYSIS.health_score || "A") + "\n" + AI_ANALYSIS.modularity_analysis + "\n\n";
+        if (AI_ANALYSIS.design_patterns && AI_ANALYSIS.design_patterns.length > 0) {
+          content += "### Detected Design Patterns\n";
+          AI_ANALYSIS.design_patterns.forEach(p => {
+            content += "- **" + p.name + "**: " + p.description + "\n";
+          });
+          content += "\n";
+        }
+      }
+
       if (CYCLES && CYCLES.length > 0) {
         content += "\n> [!WARNING]\n> **Circular Dependencies Detected:**\n";
         CYCLES.forEach((c, idx) => {
@@ -1647,6 +1809,7 @@
         closeInspector();
         closeOverviewModal();
         closeCyclesModal();
+        closeGemmaModal();
       } else if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         document.getElementById("module-search")?.focus();
@@ -1658,6 +1821,8 @@
         fitToScreen(true);
       } else if (e.key.toLowerCase() === "t") {
         toggleLayout();
+      } else if (e.key.toLowerCase() === "g" || e.key.toLowerCase() === "a") {
+        openGemmaModal();
       } else if (e.key.toLowerCase() === "c" && CYCLES.length > 0) {
         openCyclesModal();
       }

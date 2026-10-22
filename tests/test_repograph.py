@@ -19,7 +19,8 @@ from repograph import (
     scan_repository,
     generate_bulletproof_ast_mermaid,
     parse_args,
-    build_unified_html
+    build_unified_html,
+    GemmaArchitectEngine
 )
 
 
@@ -219,5 +220,114 @@ class TestMermaidGeneration(unittest.TestCase):
         self.assertIn("subgraph layer_Application_Entry", mmd)
 
 
+class TestGemmaArchitectEngine(unittest.TestCase):
+    def setUp(self):
+        self.summary = {
+            "app.py": {
+                "id": "app_py",
+                "layer": "Application Entry",
+                "classes": ["Application"],
+                "class_details": {"Application": {"bases": [], "methods": ["run()"]}},
+                "functions": ["main()"],
+                "internal_dependencies": ["api/routes.py"],
+                "external_dependencies": [],
+                "has_entry_point": True,
+                "complexity": 5,
+                "docstring": "Entrypoint of the app."
+            },
+            "api/routes.py": {
+                "id": "api_routes_py",
+                "layer": "API & Interface",
+                "classes": ["RouterController"],
+                "class_details": {"RouterController": {"bases": [], "methods": ["get()", "post()"]}},
+                "functions": [],
+                "internal_dependencies": ["core/engine.py"],
+                "external_dependencies": [("requests", "third_party")],
+                "has_entry_point": False,
+                "complexity": 8,
+                "docstring": "API Routing layer."
+            },
+            "core/engine.py": {
+                "id": "core_engine_py",
+                "layer": "Core & Domain",
+                "classes": ["WorkflowEngine"],
+                "class_details": {"WorkflowEngine": {"bases": [], "methods": ["compute()"]}},
+                "functions": [],
+                "internal_dependencies": ["models/user.py"],
+                "external_dependencies": [],
+                "has_entry_point": False,
+                "complexity": 10,
+                "docstring": "Business logic engine."
+            },
+            "models/user.py": {
+                "id": "models_user_py",
+                "layer": "Data & Storage",
+                "classes": ["UserModel"],
+                "class_details": {"UserModel": {"bases": [], "methods": ["find()", "save()"]}},
+                "functions": [],
+                "internal_dependencies": [],
+                "external_dependencies": [],
+                "has_entry_point": False,
+                "complexity": 4,
+                "docstring": "Data entity model."
+            }
+        }
+
+    def test_gemma_architecture_analysis(self):
+        result = GemmaArchitectEngine.analyze_architecture(
+            summary=self.summary,
+            cycles=[],
+            repo_name="DemoApp",
+            model="gemma2:2b",
+            provider="offline"
+        )
+        self.assertIn("executive_summary", result)
+        self.assertIn("design_patterns", result)
+        self.assertIn("health_score", result)
+        self.assertIn("modularity_analysis", result)
+        self.assertIn("recommendations", result)
+        self.assertIn("module_roles", result)
+        self.assertEqual(result["health_score"], "A")
+        
+        # Test pattern detection
+        pattern_names = [p["name"] for p in result["design_patterns"]]
+        self.assertIn("Clean N-Tier Layered Architecture", pattern_names)
+        self.assertIn("Dispatcher & Facade Pattern", pattern_names)
+        self.assertIn("Core Domain Workflow Orchestrator", pattern_names)
+        self.assertIn("Data Entity & Domain Model", pattern_names)
+
+    def test_gemma_cycle_remediation_recipes(self):
+        cycles = [["api/routes.py", "core/engine.py", "api/routes.py"]]
+        result = GemmaArchitectEngine.analyze_architecture(
+            summary=self.summary,
+            cycles=cycles,
+            repo_name="DemoApp"
+        )
+        self.assertEqual(result["health_score"], "C+")
+        self.assertIn("circular_dependency_fixes", result)
+        self.assertEqual(len(result["circular_dependency_fixes"]), 1)
+        fix = result["circular_dependency_fixes"][0]
+        self.assertIn("remediation_recipe", fix)
+        self.assertIn("Dependency Inversion", fix["remediation_recipe"])
+
+    def test_html_includes_gemma_analysis(self):
+        ai_data = {
+            "engine": "Google Gemma 2 (gemma2:2b)",
+            "health_score": "A+",
+            "executive_summary": "Top notch architecture.",
+            "design_patterns": [{"name": "Facade", "description": "Unified interface"}],
+            "modularity_analysis": "Decoupled.",
+            "recommendations": ["Keep clean."],
+            "circular_dependency_fixes": [],
+            "module_roles": {"app.py": "Bootstrap"}
+        }
+        html = build_unified_html("graph TD\n", "graph LR\n", "DemoApp", self.summary, ai_analysis=ai_data)
+        self.assertIn("Gemma AI Architect", html)
+        self.assertIn("Top notch architecture.", html)
+        self.assertIn("gemma-modal", html)
+
+
+
 if __name__ == "__main__":
     unittest.main()
+
