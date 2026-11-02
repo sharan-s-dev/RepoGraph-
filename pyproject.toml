@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repograph"
-version = "1.2.0"
+version = "1.2.1"
 description = "Deterministic Python codebase intelligence with dependency graphs, explainable metrics, and optional local open-weight AI."
 readme = "README.md"
 authors = [

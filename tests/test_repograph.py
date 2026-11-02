@@ -347,6 +347,9 @@ class TestGemmaArchitectEngine(unittest.TestCase):
         self.assertIn("Gemma AI Architect", html)
         self.assertIn("Top notch architecture.", html)
         self.assertIn("gemma-modal", html)
+        self.assertIn("folder-picker", html)
+        self.assertIn("handleFolderSelect", html)
+        self.assertIn("drop-overlay", html)
 
     def test_html_escapes_script_breakout_content(self):
         summary = {

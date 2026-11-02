@@ -23,7 +23,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any, Optional, Union
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
@@ -1689,9 +1689,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       transform: translateY(0);
       opacity: 1;
     }
+
+    #drop-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: rgba(6, 8, 14, 0.88);
+      border: 2px dashed var(--accent);
+      color: var(--text-main);
+      z-index: 300;
+      pointer-events: none;
+    }
+
+    #drop-overlay.dragover { display: flex; }
+    #drop-overlay h2 { font-size: 24px; }
   </style>
 </head>
 <body>
+
+  <input type="file" id="folder-picker" webkitdirectory directory multiple style="display:none;" onchange="handleFolderSelect(this.files)">
+  <div id="drop-overlay">
+    <h2>Drop a Python repository folder</h2>
+    <p style="color:var(--text-muted); margin-top:8px;">The browser parser runs locally; files are not uploaded.</p>
+  </div>
 
   <header class="top-nav">
     <div class="brand-group">
@@ -1709,6 +1732,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
 
       <div id="cycles-nav-badge"></div>
+
+      <button class="btn" onclick="triggerFolderSelect()">
+        <span>Open Local Repo</span>
+      </button>
 
       <button class="btn btn-ai" onclick="openGemmaModal()">
         <span>🤖 Gemma AI Architect</span>
@@ -1744,19 +1771,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="label">Files</div>
-          <div class="value">__TOTAL_FILES__</div>
+          <div class="value" id="stat-files">__TOTAL_FILES__</div>
         </div>
         <div class="metric-card">
           <div class="label">Classes</div>
-          <div class="value">__TOTAL_CLASSES__</div>
+          <div class="value" id="stat-classes">__TOTAL_CLASSES__</div>
         </div>
         <div class="metric-card">
           <div class="label">Funcs</div>
-          <div class="value">__TOTAL_FUNCS__</div>
+          <div class="value" id="stat-functions">__TOTAL_FUNCS__</div>
         </div>
         <div class="metric-card">
           <div class="label">Edges</div>
-          <div class="value">__TOTAL_DEPS__</div>
+          <div class="value" id="stat-edges">__TOTAL_DEPS__</div>
         </div>
       </div>
 
@@ -1968,13 +1995,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="toast">Diagram copied to clipboard!</div>
 
   <script>
-    const SUMMARY = __SUMMARY_JSON__;
-    const CYCLES = __CYCLES_JSON__;
-    const AI_ANALYSIS = __AI_ANALYSIS_JSON__;
-    const MERMAID_TD = __MERMAID_TD__;
-    const MERMAID_LR = __MERMAID_LR__;
-    const METRICS = __METRICS_JSON__;
-    const REPO_NAME = __REPO_NAME_JS__;
+    let SUMMARY = __SUMMARY_JSON__;
+    let CYCLES = __CYCLES_JSON__;
+    let AI_ANALYSIS = __AI_ANALYSIS_JSON__;
+    let MERMAID_TD = __MERMAID_TD__;
+    let MERMAID_LR = __MERMAID_LR__;
+    let METRICS = __METRICS_JSON__;
+    let REPO_NAME = __REPO_NAME_JS__;
 
     let currentDirection = "TD";
     let selectedModule = null;
@@ -2180,6 +2207,278 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return String(value ?? '').replace(/[&<>"']/g, character => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[character]));
+    }
+
+    // --- LOCAL FOLDER IMPORT -------------------------------------------------
+    // This browser path is intentionally deterministic and dependency-free. It
+    // complements the full Python AST CLI: the static dashboard remains useful
+    // on Pages, while selected .py files are parsed locally and never uploaded.
+    function sanitizeClientId(value) {
+      let id = String(value || '').replace(/[^a-zA-Z0-9_]/g, '_');
+      if (!id) id = 'node_root';
+      if (/^[0-9]/.test(id)) id = 'n_' + id;
+      return id;
+    }
+
+    function importedFilePath(file) {
+      return file.webkitRelativePath || file.__repoPath || file.name || '';
+    }
+
+    function relativeImportedPath(file) {
+      const path = importedFilePath(file).split(String.fromCharCode(92)).join('/');
+      const parts = path.split('/').filter(Boolean);
+      return parts.length > 1 ? parts.slice(1).join('/') : (parts[0] || file.name);
+    }
+
+    function parsePythonCodeClientSide(filename, content) {
+      const lines = content.split(String.fromCharCode(10));
+      const classes = [];
+      const functions = [];
+      const rawImports = [];
+      let docstring = '';
+      let hasMain = false;
+      let complexity = 1;
+      const trimmedContent = content.trimStart();
+      const tripleDouble = String.fromCharCode(34).repeat(3);
+      const tripleSingle = String.fromCharCode(39).repeat(3);
+      const docQuote = trimmedContent.startsWith(tripleDouble) ? tripleDouble : (trimmedContent.startsWith(tripleSingle) ? tripleSingle : '');
+      if (docQuote) {
+        const docEnd = trimmedContent.indexOf(docQuote, 3);
+        if (docEnd > 3) docstring = trimmedContent.slice(3, docEnd).trim().split(String.fromCharCode(10))[0].slice(0, 140);
+      }
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const classMatch = trimmed.match(/^class[ \t]+([a-zA-Z0-9_]+)/);
+        if (classMatch) { classes.push(classMatch[1]); complexity += 2; }
+        const functionMatch = trimmed.match(/^(?:async[ \t]+)?def[ \t]+([a-zA-Z0-9_]+)/);
+        if (functionMatch && !functionMatch[1].startsWith('_')) { functions.push(functionMatch[1]); complexity += 1; }
+        if (/^(if|elif|for|while|try|except|with)([ \t]|$)/.test(trimmed)) complexity += 1;
+        if (trimmed.includes('__name__') && trimmed.includes('__main__')) hasMain = true;
+
+        const importMatch = trimmed.match(/^import[ \t]+([a-zA-Z0-9_., ]+)/);
+        if (importMatch) importMatch[1].split(',').forEach(item => rawImports.push(item.trim().split('.')[0]));
+        const fromMatch = trimmed.match(/^from[ \t]+([.a-zA-Z0-9_]+)[ \t]+import([ \t]|$)/);
+        if (fromMatch) rawImports.push(fromMatch[1]);
+      }
+
+      const lower = filename.toLowerCase();
+      let layer = 'Domain Services';
+      if (/route|controller|api|endpoint|handler|view|server/.test(lower)) layer = 'API & Interface';
+      else if (/model|schema|entity|dto|database|db|repository|crud/.test(lower)) layer = 'Data & Storage';
+      else if (/core|engine|service|logic|domain|pipeline|manager/.test(lower)) layer = 'Core & Domain';
+      else if (/util|helper|common|tool|shared|lib/.test(lower)) layer = 'Utilities & Shared';
+      else if (/config|setting|env|constant/.test(lower)) layer = 'Configuration';
+      else if (hasMain || /main[.]py$|app[.]py$|cli[.]py$|run[.]py$/.test(lower)) layer = 'Application Entry';
+
+      return {
+        id: sanitizeClientId(filename), file: filename, layer,
+        docstring: docstring || 'Python module', full_docstring: docstring || 'Python module',
+        classes, class_details: {}, functions: functions.slice(0, 10),
+        all_functions_count: functions.length, raw_imports: Array.from(new Set(rawImports)),
+        internal_dependencies: [], external_dependencies: [], stdlib_dependencies: [],
+        has_entry_point: hasMain || /main[.]py$|app[.]py$|cli[.]py$|run[.]py$/.test(lower),
+        loc: lines.length, complexity: Math.min(complexity, 100), imported_by: []
+      };
+    }
+
+    function clientCycleReport(summary) {
+      const cycles = [];
+      const seen = new Set();
+      const visited = new Set();
+      for (const root of Object.keys(summary).sort()) {
+        if (visited.has(root)) continue;
+        visited.add(root);
+        const path = [root];
+        const indexes = {[root]: 0};
+        const frames = [[root, 0]];
+        while (frames.length) {
+          const frame = frames[frames.length - 1];
+          const node = frame[0];
+          const deps = summary[node]?.internal_dependencies || [];
+          if (frame[1] >= deps.length) {
+            frames.pop();
+            delete indexes[node];
+            if (path[path.length - 1] === node) path.pop();
+            continue;
+          }
+          const dep = deps[frame[1]++];
+          if (!summary[dep]) continue;
+          if (Object.prototype.hasOwnProperty.call(indexes, dep)) {
+            const cycle = path.slice(indexes[dep]).concat(dep);
+            const core = cycle.slice(0, -1);
+            const pivot = Math.min(...core.map(item => core.indexOf(item)));
+            const canonical = core.slice(pivot).concat(core.slice(0, pivot)).join('|');
+            if (core.length >= 2 && !seen.has(canonical)) {
+              seen.add(canonical);
+              cycles.push(cycle);
+              if (cycles.length >= 10) return cycles;
+            }
+          } else if (!visited.has(dep)) {
+            visited.add(dep);
+            indexes[dep] = path.length;
+            path.push(dep);
+            frames.push([dep, 0]);
+          }
+        }
+      }
+      return cycles;
+    }
+
+    function buildClientMermaid(summary, direction) {
+      const lines = [
+        `graph ${direction}`,
+        '  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;',
+        '  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;',
+        '  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;'
+      ];
+      const ids = {};
+      const used = new Set();
+      for (const [file, data] of Object.entries(summary)) {
+        let id = sanitizeClientId(file);
+        let suffix = 2;
+        while (used.has(id)) id = `${sanitizeClientId(file)}_${suffix++}`;
+        used.add(id);
+        ids[file] = id;
+        const label = `${file} | ${data.classes?.slice(0, 2).join(', ') || data.functions?.slice(0, 2).join(', ') || 'module'}`
+          .replaceAll('"', "'").split(String.fromCharCode(10)).join("'").replaceAll('&', 'and');
+        const style = data.has_entry_point ? 'entryNode' : (data.layer.includes('Core') ? 'coreNode' : 'defaultNode');
+        lines.push(`  ${id}["${label}"]:::${style}`);
+      }
+      for (const [file, data] of Object.entries(summary)) {
+        for (const dep of data.internal_dependencies || []) {
+          if (ids[file] && ids[dep]) lines.push(`  ${ids[file]} --> ${ids[dep]}`);
+        }
+      }
+      return lines.join(String.fromCharCode(10));
+    }
+
+    function updateImportedMetrics() {
+      const modules = Object.keys(SUMMARY).length;
+      const classes = Object.values(SUMMARY).reduce((total, data) => total + (data.classes?.length || 0), 0);
+      const functions = Object.values(SUMMARY).reduce((total, data) => total + (data.all_functions_count || 0), 0);
+      const edges = Object.values(SUMMARY).reduce((total, data) => total + (data.internal_dependencies?.length || 0), 0);
+      const values = {"stat-files": modules, "stat-classes": classes, "stat-functions": functions, "stat-edges": edges};
+      for (const [id, value] of Object.entries(values)) {
+        const element = document.getElementById(id);
+        if (element) element.innerText = value;
+      }
+    }
+
+    function createImportedAnalysis(repoTitle) {
+      const moduleCount = Object.keys(SUMMARY).length;
+      const edgeCount = Object.values(SUMMARY).reduce((total, data) => total + (data.internal_dependencies?.length || 0), 0);
+      const roles = {};
+      for (const [file, data] of Object.entries(SUMMARY)) roles[file] = `${data.layer} module detected by the local browser parser.`;
+      return {
+        engine: 'RepoGraph browser parser', mode: 'deterministic-client',
+        health_score: CYCLES.length ? 'C+' : 'B',
+        executive_summary: `${repoTitle} contains ${moduleCount} Python modules and ${edgeCount} internal dependency edges.`,
+        modularity_analysis: CYCLES.length ? `${CYCLES.length} circular dependency chain(s) detected locally.` : 'No circular dependency chains detected by the browser parser.',
+        design_patterns: [], recommendations: ['Run the RepoGraph CLI for full Python AST analysis and optional local AI commentary.'],
+        circular_dependency_fixes: [], module_roles: roles
+      };
+    }
+
+    async function handleFolderSelect(files) {
+      if (!files || files.length === 0) return;
+      showToast('Parsing Python repository locally...');
+      const pyFiles = Array.from(files).filter(file => {
+        const path = importedFilePath(file).toLowerCase();
+        return path.endsWith('.py') && !path.includes('/.git/') && !path.includes('/node_modules/') && !path.includes('/venv/');
+      });
+      if (!pyFiles.length) { showToast('No Python files found in the selected folder.'); return; }
+
+      const importedSummary = {};
+      const moduleToFile = {};
+      const paths = pyFiles.map(relativeImportedPath);
+      for (const file of pyFiles) {
+        const relPath = relativeImportedPath(file);
+        const moduleName = relPath.replace(/[.]py$/, '').replaceAll('/', '.');
+        moduleToFile[moduleName] = relPath;
+        if (moduleName.endsWith('.__init__')) moduleToFile[moduleName.slice(0, -9)] = relPath;
+        const shortName = moduleName.split('.').pop();
+        if (!moduleToFile[shortName]) moduleToFile[shortName] = relPath;
+      }
+      for (const file of pyFiles) {
+        const relPath = relativeImportedPath(file);
+        importedSummary[relPath] = parsePythonCodeClientSide(relPath, await file.text());
+      }
+      for (const [relPath, data] of Object.entries(importedSummary)) {
+        const deps = new Set();
+        for (const rawImport of data.raw_imports) {
+          const cleanImport = rawImport.replace(/^[.]+/, '');
+          const match = Object.keys(moduleToFile).find(name => name === cleanImport || name.endsWith(`.${cleanImport}`));
+          if (match && moduleToFile[match] !== relPath) deps.add(moduleToFile[match]);
+        }
+        data.internal_dependencies = Array.from(deps).sort();
+      }
+      for (const [file, data] of Object.entries(importedSummary)) {
+        for (const dep of data.internal_dependencies) {
+          if (importedSummary[dep] && !importedSummary[dep].imported_by.includes(file)) importedSummary[dep].imported_by.push(file);
+        }
+      }
+
+      const rootPath = importedFilePath(pyFiles[0]).split(String.fromCharCode(92)).join('/').split('/');
+      const repoTitle = rootPath.length > 1 ? rootPath[0] : 'Imported Repository';
+      SUMMARY = importedSummary;
+      CYCLES = clientCycleReport(SUMMARY);
+      REPO_NAME = repoTitle;
+      METRICS = {modules: Object.keys(SUMMARY).length, cycle_count: CYCLES.length};
+      AI_ANALYSIS = createImportedAnalysis(repoTitle);
+      MERMAID_TD = buildClientMermaid(SUMMARY, 'TD');
+      MERMAID_LR = buildClientMermaid(SUMMARY, 'LR');
+      document.title = `RepoGraph - ${repoTitle}`;
+      const title = document.querySelector('.title-group h1');
+      if (title) title.innerText = repoTitle;
+      updateImportedMetrics();
+      initSidebar();
+      closeInspector();
+      await renderMermaidDiagram();
+      resetZoom();
+      showToast(`Imported ${Object.keys(SUMMARY).length} Python modules locally.`);
+    }
+
+    function triggerFolderSelect() {
+      document.getElementById('folder-picker')?.click();
+    }
+
+    async function collectDroppedEntry(entry, prefix, files) {
+      if (entry.isFile) {
+        await new Promise(resolve => entry.file(file => { file.__repoPath = `${prefix}${file.name}`; files.push(file); resolve(); }));
+        return;
+      }
+      if (!entry.isDirectory) return;
+      const reader = entry.createReader();
+      const readBatch = () => new Promise(resolve => reader.readEntries(resolve));
+      let batch;
+      do {
+        batch = await readBatch();
+        for (const child of batch) await collectDroppedEntry(child, `${prefix}${entry.name}/`, files);
+      } while (batch.length);
+    }
+
+    function installFolderDropHandlers() {
+      const overlay = document.getElementById('drop-overlay');
+      for (const eventName of ['dragenter', 'dragover']) {
+        document.body.addEventListener(eventName, event => {
+          if (event.dataTransfer?.types?.includes('Files')) { event.preventDefault(); overlay.classList.add('dragover'); }
+        });
+      }
+      for (const eventName of ['dragleave', 'drop']) {
+        document.body.addEventListener(eventName, event => { event.preventDefault(); overlay.classList.remove('dragover'); });
+      }
+      document.body.addEventListener('drop', async event => {
+        const items = Array.from(event.dataTransfer?.items || []);
+        const files = [];
+        for (const item of items) {
+          const entry = item.webkitGetAsEntry?.();
+          if (entry) await collectDroppedEntry(entry, '', files);
+        }
+        if (files.length) await handleFolderSelect(files);
+        else if (event.dataTransfer?.files?.length) await handleFolderSelect(event.dataTransfer.files);
+      });
     }
 
     function renderNativeFallback() {
@@ -2423,6 +2722,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const layers = new Set();
 
       list.innerHTML = "";
+      filterContainer.innerHTML = `<span class="layer-chip active" onclick="filterByLayer('ALL')">All</span>`;
       for (const [file, data] of Object.entries(SUMMARY)) {
         layers.add(data.layer);
 
@@ -2829,6 +3129,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fitToScreen(false);
     });
 
+    installFolderDropHandlers();
     initSidebar();
     renderMermaidDiagram();
   </script>
