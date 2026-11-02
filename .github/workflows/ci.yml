@@ -28,7 +28,7 @@ jobs:
 
       - name: Run unit test suite
         run: |
-          python -m unittest discover tests
+          python -m unittest discover -s tests -p "test*.py"
 
       - name: Test CLI execution on demo project
         run: |
@@ -40,7 +40,8 @@ jobs:
         run: |
           python repograph.py --help
           python repograph.py --version
-          python repograph.py demo_project --json
+          python repograph.py demo_project --json > report.json
+          python -c "import json; r=json.load(open('report.json', encoding='utf-8')); assert r['schema_version'] == 1; assert r['metrics']['modules'] > 0"
 
       - name: Test editable installation
         run: |

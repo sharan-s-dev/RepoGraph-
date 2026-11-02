@@ -7,20 +7,23 @@ Zero third-party pip dependencies required.
 
 import ast
 import argparse
+import fnmatch
 import json
 import os
 import re
 import sys
 import subprocess
 import socket
+import time
 import urllib.request
 import urllib.error
 import webbrowser
+from html import escape as html_escape
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Any, Optional
+from typing import Dict, List, Set, Tuple, Any, Optional, Union
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # Ensure UTF-8 output on Windows consoles
 if sys.platform == "win32":
@@ -51,6 +54,17 @@ IGNORED_DIRS: Set[str] = {
     ".eggs", "*.egg-info", ".mypy_cache", ".ruff_cache", "coverage", ".tox"
 }
 
+MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
+
+
+def matches_exclude(parts: Tuple[str, ...], excludes: Set[str]) -> bool:
+    """Match exact directory names and glob patterns against a relative path."""
+    path = "/".join(parts)
+    return any(
+        any(fnmatch.fnmatch(part, pattern) or fnmatch.fnmatch(path, pattern) for part in parts)
+        for pattern in excludes
+    )
+
 
 def sanitize_id(name: str) -> str:
     """Mermaid node IDs must strictly be alphanumeric and underscores."""
@@ -74,6 +88,11 @@ def resolve_repo_name(target_path: Path, custom_name: Optional[str] = None) -> s
             try:
                 with open(p, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
+                if config_file == "package.json":
+                    package = json.loads(content)
+                    package_name = package.get("name") if isinstance(package, dict) else None
+                    if isinstance(package_name, str) and package_name.strip():
+                        return package_name.strip()
                 m = re.search(r'name\s*=\s*["\']([^"\']+)["\']', content)
                 if m:
                     return m.group(1).strip()
@@ -121,6 +140,7 @@ class CodebaseVisitor(ast.NodeVisitor):
         self.full_docstring: str = ""
         self.has_main: bool = False
         self.complexity_score: int = 1
+        self._class_depth: int = 0
 
     def visit_Module(self, node: ast.Module):
         doc = ast.get_docstring(node)
@@ -153,17 +173,19 @@ class CodebaseVisitor(ast.NodeVisitor):
             "docstring": class_doc.split("\n")[0][:100] if class_doc else ""
         }
         self.complexity_score += 2
+        self._class_depth += 1
         self.generic_visit(node)
+        self._class_depth -= 1
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        if not node.name.startswith("_"):
+        if self._class_depth == 0 and not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
             self.functions.append(f"{node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-        if not node.name.startswith("_"):
+        if self._class_depth == 0 and not node.name.startswith("_"):
             args_list = [a.arg for a in node.args.args if a.arg != "self"]
             self.functions.append(f"async {node.name}({', '.join(args_list[:3])})")
         self.complexity_score += 1
@@ -239,21 +261,34 @@ def count_file_lines(path: Path) -> int:
 
 
 def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
-    """Detects cycles in the internal dependency graph and deduplicates them."""
+    """Detect cycles without recursion so large repositories cannot overflow the call stack."""
     cycles: List[List[str]] = []
     seen_canonical: Set[Tuple[str, ...]] = set()
 
-    def dfs(node: str, path: List[str], rec_stack: Set[str]):
-        rec_stack.add(node)
-        path.append(node)
+    visited: Set[str] = set()
+    for root in sorted(summary.keys()):
+        if root in visited:
+            continue
+        visited.add(root)
+        active_path = [root]
+        active_index = {root: 0}
+        frames: List[Tuple[str, Any]] = [(root, iter(summary.get(root, {}).get("internal_dependencies", [])))]
 
-        deps = summary.get(node, {}).get("internal_dependencies", [])
-        for dep in deps:
+        while frames:
+            node, dependencies = frames[-1]
+            try:
+                dep = next(dependencies)
+            except StopIteration:
+                frames.pop()
+                active_index.pop(node, None)
+                if active_path and active_path[-1] == node:
+                    active_path.pop()
+                continue
+
             if dep not in summary:
                 continue
-            if dep in rec_stack:
-                cycle_start = path.index(dep)
-                cycle = path[cycle_start:] + [dep]
+            if dep in active_index:
+                cycle = active_path[active_index[dep]:] + [dep]
                 core = cycle[:-1]
                 if len(core) >= 2:
                     min_idx = core.index(min(core))
@@ -261,16 +296,15 @@ def detect_circular_dependencies(summary: Dict[str, Any]) -> List[List[str]]:
                     if canonical not in seen_canonical:
                         seen_canonical.add(canonical)
                         cycles.append(cycle)
-            elif dep not in path:
-                dfs(dep, path, rec_stack)
+                        if len(cycles) >= 10:
+                            return cycles
+            elif dep not in visited:
+                visited.add(dep)
+                active_index[dep] = len(active_path)
+                active_path.append(dep)
+                frames.append((dep, iter(summary.get(dep, {}).get("internal_dependencies", []))))
 
-        path.pop()
-        rec_stack.remove(node)
-
-    for mod in sorted(summary.keys()):
-        dfs(mod, [], set())
-
-    return cycles[:10]
+    return cycles
 
 
 def resolve_import_target(
@@ -347,7 +381,12 @@ def resolve_import_target(
     return None, None
 
 
-def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None) -> Dict[str, Any]:
+def scan_repository(
+    repo_path: Path,
+    extra_excludes: Optional[List[str]] = None,
+    return_diagnostics: bool = False,
+    quiet: bool = False,
+) -> Union[Dict[str, Any], Tuple[Dict[str, Any], Dict[str, Any]]]:
     repo_path = repo_path.resolve()
     codebase_summary: Dict[str, Any] = {}
     excludes = set(IGNORED_DIRS)
@@ -355,13 +394,14 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
         excludes.update(extra_excludes)
 
     py_files: List[Path] = []
+    parse_errors: List[Dict[str, str]] = []
     for root, dirs, files in os.walk(repo_path):
-        dirs[:] = [d for d in dirs if d not in excludes and not d.startswith(".")]
+        dirs[:] = [d for d in dirs if not d.startswith(".") and not matches_exclude(tuple(Path(root, d).relative_to(repo_path).parts), excludes)]
         for file in files:
             if file.endswith(".py"):
                 full_p = Path(root) / file
                 rel_parts = full_p.relative_to(repo_path).parts
-                if not any(ex in rel_parts for ex in excludes):
+                if not matches_exclude(rel_parts, excludes):
                     py_files.append(full_p)
 
     all_py_files: Set[str] = {p.relative_to(repo_path).as_posix() for p in py_files}
@@ -369,6 +409,13 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
 
     for p in py_files:
         rel_posix = p.relative_to(repo_path).as_posix()
+        try:
+            if p.stat().st_size > MAX_SOURCE_FILE_BYTES:
+                parse_errors.append({"file": rel_posix, "error": f"source file exceeds {MAX_SOURCE_FILE_BYTES} bytes"})
+                continue
+        except OSError as error:
+            parse_errors.append({"file": rel_posix, "error": str(error)})
+            continue
         loc = count_file_lines(p)
         try:
             with open(p, "r", encoding="utf-8", errors="ignore") as f:
@@ -399,8 +446,21 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
                 "imported_by": []
             }
         except Exception as e:
-            print(f"      [!] Warning: Could not parse {rel_posix}: {e}")
+            parse_errors.append({"file": rel_posix, "error": str(e)})
+            if not quiet:
+                print(f"      [!] Warning: Could not parse {rel_posix}: {e}")
             continue
+
+    # Mermaid identifiers are not guaranteed to be unique after punctuation
+    # sanitisation (for example, ``a-b.py`` and ``a_b.py``). Make collisions
+    # explicit so one module can never steal another module's graph events.
+    used_ids: Dict[str, int] = {}
+    for file in sorted(codebase_summary):
+        base_id = codebase_summary[file]["id"]
+        used_ids[base_id] = used_ids.get(base_id, 0) + 1
+        ordinal = used_ids[base_id]
+        if ordinal > 1:
+            codebase_summary[file]["id"] = f"{base_id}_{ordinal}"
 
     # Second pass: resolve dependencies
     for rel_posix, visitor in visitors.items():
@@ -446,7 +506,68 @@ def scan_repository(repo_path: Path, extra_excludes: Optional[List[str]] = None)
     for f in empty_inits:
         del codebase_summary[f]
 
+    if return_diagnostics:
+        return codebase_summary, {"parse_errors": parse_errors}
     return codebase_summary
+
+
+def compute_graph_metrics(summary: Dict[str, Any], cycles: Optional[List[List[str]]] = None) -> Dict[str, Any]:
+    """Return deterministic, explainable graph metrics for a scanned repository."""
+    cycles = cycles if cycles is not None else detect_circular_dependencies(summary)
+    modules = len(summary)
+    edges = sum(len(data.get("internal_dependencies", [])) for data in summary.values())
+    classes = sum(len(data.get("classes", [])) for data in summary.values())
+    functions = sum(data.get("all_functions_count", len(data.get("functions", []))) for data in summary.values())
+    loc = sum(data.get("loc", 0) for data in summary.values())
+    inbound = {name: len(data.get("imported_by", [])) for name, data in summary.items()}
+    outbound = {name: len(data.get("internal_dependencies", [])) for name, data in summary.items()}
+    orphan_modules = sorted(name for name, degree in inbound.items() if degree == 0 and outbound[name] == 0)
+    hotspots = sorted(
+        ({"file": name, "fan_in": inbound[name], "fan_out": outbound[name], "score": inbound[name] + outbound[name]} for name in summary),
+        key=lambda item: (-item["score"], -item["fan_in"], item["file"])
+    )[:10]
+    layer_edges: Dict[str, int] = {}
+    for source, data in summary.items():
+        for target in data.get("internal_dependencies", []):
+            target_data = summary.get(target)
+            if not target_data:
+                continue
+            key = f"{data.get('layer', 'Unknown')} -> {target_data.get('layer', 'Unknown')}"
+            layer_edges[key] = layer_edges.get(key, 0) + 1
+    return {
+        "modules": modules,
+        "classes": classes,
+        "functions": functions,
+        "lines_of_code": loc,
+        "internal_edges": edges,
+        "average_fan_out": round(edges / modules, 2) if modules else 0,
+        "cycle_count": len(cycles),
+        "orphan_modules": orphan_modules,
+        "hotspots": hotspots,
+        "layer_edges": dict(sorted(layer_edges.items())),
+    }
+
+
+def build_json_report(
+    summary: Dict[str, Any],
+    repo_name: str,
+    cycles: List[List[str]],
+    diagnostics: Optional[Dict[str, Any]] = None,
+    elapsed_ms: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Build the stable machine-readable output contract for ``--json``."""
+    report: Dict[str, Any] = {
+        "schema_version": 1,
+        "tool": {"name": "RepoGraph", "version": __version__},
+        "project": repo_name,
+        "metrics": compute_graph_metrics(summary, cycles),
+        "cycles": cycles,
+        "modules": summary,
+        "diagnostics": diagnostics or {"parse_errors": []},
+    }
+    if elapsed_ms is not None:
+        report["metrics"]["scan_time_ms"] = round(elapsed_ms, 3)
+    return report
 
 
 # ==============================================================================
@@ -516,9 +637,10 @@ class GemmaArchitectEngine:
                     except Exception:
                         continue
 
-        # 3. Try Groq Cloud Gemma runner if key is available
+        # 3. Try Groq Cloud Gemma runner only when explicitly selected. The
+        # default ``auto`` mode must remain local-first and offline-safe.
         key = api_key or os.environ.get("GROQ_API_KEY")
-        if (provider in ("auto", "groq")) and key:
+        if provider == "groq" and key:
             try:
                 url = "https://api.groq.com/openai/v1/chat/completions"
                 payload = json.dumps({
@@ -540,7 +662,73 @@ class GemmaArchitectEngine:
             except Exception:
                 pass
 
+        # 4. Hugging Face Inference API is explicit opt-in through --ai-provider hf
+        # or HF_TOKEN. It is intentionally not used by the default local-first
+        # path unless a token is present.
+        hf_token = api_key or os.environ.get("HF_TOKEN")
+        if provider == "hf" and hf_token:
+            try:
+                model_url = f"https://api-inference.huggingface.co/models/{model}"
+                payload = json.dumps({"inputs": prompt, "parameters": {"return_full_text": False}}).encode("utf-8")
+                req = urllib.request.Request(model_url, data=payload, headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {hf_token}"
+                })
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    result = json.loads(response.read().decode("utf-8"))
+                    if isinstance(result, list) and result and isinstance(result[0], dict):
+                        return result[0].get("generated_text")
+                    if isinstance(result, dict):
+                        return result.get("generated_text")
+            except Exception:
+                pass
+
         return None
+
+    @staticmethod
+    def validate_analysis(
+        candidate: Any,
+        summary: Dict[str, Any],
+        cycles: List[List[str]],
+        engine: str,
+        mode: str,
+    ) -> Dict[str, Any]:
+        """Normalise model output before it reaches the report or HTML template."""
+        value = candidate if isinstance(candidate, dict) else {}
+        health = value.get("health_score")
+        if health not in {"A+", "A", "A-", "B+", "B", "C+", "C", "D"}:
+            health = "C+" if cycles else "B"
+
+        def string_list(raw: Any) -> List[str]:
+            if not isinstance(raw, list):
+                return []
+            return [str(item).strip()[:1000] for item in raw if isinstance(item, (str, int, float)) and str(item).strip()][:20]
+
+        patterns = []
+        for item in value.get("design_patterns", []) if isinstance(value.get("design_patterns", []), list) else []:
+            if isinstance(item, dict) and item.get("name"):
+                patterns.append({"name": str(item["name"])[:200], "description": str(item.get("description", ""))[:1000]})
+        fixes = []
+        for item in value.get("circular_dependency_fixes", []) if isinstance(value.get("circular_dependency_fixes", []), list) else []:
+            if isinstance(item, dict):
+                fixes.append({
+                    "cycle": str(item.get("cycle", ""))[:1000],
+                    "root_cause": str(item.get("root_cause", ""))[:1000],
+                    "remediation_recipe": str(item.get("remediation_recipe", ""))[:3000],
+                })
+        roles = value.get("module_roles", {}) if isinstance(value.get("module_roles", {}), dict) else {}
+        safe_roles = {name: str(roles[name])[:1000] for name in summary if name in roles}
+        return {
+            "engine": engine,
+            "mode": mode,
+            "health_score": health,
+            "executive_summary": str(value.get("executive_summary", "No model narrative was available."))[:3000],
+            "modularity_analysis": str(value.get("modularity_analysis", "Deterministic metrics are available in the overview."))[:3000],
+            "design_patterns": patterns,
+            "recommendations": string_list(value.get("recommendations")),
+            "circular_dependency_fixes": fixes[:20],
+            "module_roles": safe_roles,
+        }
 
     @classmethod
     def analyze_architecture(
@@ -581,9 +769,7 @@ class GemmaArchitectEngine:
                 if clean_json_str.endswith("```"):
                     clean_json_str = clean_json_str[:-3]
                 parsed = json.loads(clean_json_str.strip())
-                parsed["engine"] = f"Google Gemma 2 ({model} Live Inference)"
-                parsed["mode"] = "live"
-                return parsed
+                return cls.validate_analysis(parsed, summary, cycles, f"Gemma ({model}) live inference", "live")
             except Exception:
                 pass
 
@@ -679,7 +865,7 @@ class GemmaArchitectEngine:
             f"delivering high operational cohesion with {total_edges} cross-module dependency links."
         )
 
-        return {
+        return cls.validate_analysis({
             "engine": f"Google Gemma 2 ({model} Architecture Engine)",
             "mode": "offline-synthesis",
             "health_score": health_score,
@@ -689,7 +875,7 @@ class GemmaArchitectEngine:
             "recommendations": recs,
             "circular_dependency_fixes": cycle_fixes,
             "module_roles": module_roles
-        }
+        }, summary, cycles, f"Google Gemma 2 ({model}) Architecture Engine", "offline-synthesis")
 
 
 def generate_bulletproof_ast_mermaid(summary: Dict[str, Any], direction: str = "TD") -> str:
@@ -759,9 +945,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RepoGraph - __REPO_NAME__ | Codebase Architecture Explorer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- The dashboard keeps system-font fallbacks so generated artifacts remain usable offline. -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
     :root {
@@ -782,8 +966,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       --purple: #8b5cf6;
       --purple-glow: rgba(139, 92, 246, 0.35);
       --indigo: #818cf8;
-      --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
+       --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1730,9 +1914,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <h3>Architecture Overview: __REPO_NAME__</h3>
         <button class="control-btn" onclick="closeOverviewModal()">✕</button>
       </div>
-      <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
-        Architectural layers and execution boundaries in <strong>__REPO_NAME__</strong>.
-      </p>
+       <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
+         Architectural layers and execution boundaries in <strong>__REPO_NAME__</strong>.
+       </p>
+
+       <div class="metrics-grid" style="margin-top:14px;">
+         <div class="metric-card"><div class="label">LOC</div><div class="value">__TOTAL_LOC__</div></div>
+         <div class="metric-card"><div class="label">Avg fan-out</div><div class="value">__AVG_FAN_OUT__</div></div>
+         <div class="metric-card"><div class="label">Cycles</div><div class="value">__CYCLES_COUNT__</div></div>
+         <div class="metric-card"><div class="label">Scan ms</div><div class="value">__SCAN_TIME__</div></div>
+       </div>
 
       <div class="guide-step">
         <h4>1. Application Entry Points</h4>
@@ -1782,7 +1973,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const AI_ANALYSIS = __AI_ANALYSIS_JSON__;
     const MERMAID_TD = __MERMAID_TD__;
     const MERMAID_LR = __MERMAID_LR__;
-    const REPO_NAME = "__REPO_NAME__";
+    const METRICS = __METRICS_JSON__;
+    const REPO_NAME = __REPO_NAME_JS__;
 
     let currentDirection = "TD";
     let selectedModule = null;
@@ -1968,21 +2160,71 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     // --- MERMAID RENDERING & BIDIRECTIONAL PATHWAY LIGHTING ---
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'loose',
-      themeVariables: {
-        darkMode: true,
-        background: '#06080e',
-        primaryColor: '#0284c7',
-        primaryTextColor: '#f8fafc',
-        lineColor: '#38bdf8'
-      }
-    });
+    const mermaidAvailable = typeof mermaid !== "undefined";
+    if (mermaidAvailable) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'strict',
+        themeVariables: {
+          darkMode: true,
+          background: '#06080e',
+          primaryColor: '#0284c7',
+          primaryTextColor: '#f8fafc',
+          lineColor: '#38bdf8'
+        }
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[character]));
+    }
+
+    function renderNativeFallback() {
+      const entries = Object.entries(SUMMARY);
+      const columns = Math.max(1, Math.ceil(Math.sqrt(entries.length)));
+      const rows = Math.max(1, Math.ceil(entries.length / columns));
+      const width = currentDirection === "TD"
+        ? Math.max(900, columns * 220)
+        : Math.max(900, entries.length * 220);
+      const height = currentDirection === "TD"
+        ? Math.max(640, rows * 130 + 120)
+        : Math.max(460, entries.length * 92);
+      const positions = {};
+      entries.forEach(([file, data], index) => {
+        if (currentDirection === "TD") {
+          const col = index % columns;
+          const row = Math.floor(index / columns);
+          positions[file] = { x: 150 + col * 220, y: 100 + row * 130 };
+        } else {
+          positions[file] = { x: 150 + index * 220, y: 280 + ((index % 2) ? 90 : -90) };
+        }
+      });
+      const edgeMarkup = entries.flatMap(([file, data]) => (data.internal_dependencies || []).map(dep => {
+        const source = positions[file];
+        const target = positions[dep];
+        if (!source || !target) return '';
+        return `<g class="edgePath" id="edge-${escapeHtml(data.id)}-${escapeHtml(SUMMARY[dep].id)}"><path d="M ${source.x} ${source.y} L ${target.x} ${target.y}" fill="none" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#arrow)" /></g>`;
+      })).join('');
+      const nodeMarkup = entries.map(([file, data]) => {
+        const point = positions[file];
+        const label = data.classes?.length ? data.classes.slice(0, 2).join(', ') : (data.functions?.slice(0, 2).join(', ') || 'module');
+        return `<g class="node" id="flowchart-${escapeHtml(data.id)}-0" transform="translate(${point.x - 88},${point.y - 30})"><rect width="176" height="60" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" /><text x="88" y="24" text-anchor="middle" fill="#f8fafc" font-size="11">${escapeHtml(file.slice(-24))}</text><text x="88" y="43" text-anchor="middle" fill="#94a3b8" font-size="10">${escapeHtml(label.slice(0, 25))}</text></g>`;
+      }).join('');
+      panLayer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" /></marker></defs>${edgeMarkup}${nodeMarkup}</svg>`;
+      attachSvgNodeListeners();
+      requestAnimationFrame(() => fitToScreen(false));
+    }
 
     async function renderMermaidDiagram() {
       panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Rendering architecture graph...</div>';
+      if (!mermaidAvailable) {
+        renderNativeFallback();
+        showToast("Mermaid CDN unavailable; using the offline graph renderer");
+        return;
+      }
       try {
         const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
         const uniqueId = "mermaid_svg_" + Date.now();
@@ -2194,11 +2436,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         item.innerHTML = `
           <div class="module-title">
-            <span style="overflow:hidden; text-overflow:ellipsis;">${file}</span>
-            <span class="tag-badge">${data.layer.split(' ')[0]}</span>
+             <span style="overflow:hidden; text-overflow:ellipsis;">${escapeHtml(file)}</span>
+             <span class="tag-badge">${escapeHtml(data.layer.split(' ')[0])}</span>
           </div>
           <div class="module-sub">
-            ${data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module')}
+             ${escapeHtml(data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module'))}
           </div>
         `;
         list.appendChild(item);
@@ -2221,15 +2463,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (!AI_ANALYSIS) return;
       document.getElementById("gemma-health-badge").innerText = "Health: " + (AI_ANALYSIS.health_score || "A");
       document.getElementById("gemma-engine-tag").innerText = AI_ANALYSIS.engine || "Powered by Google Gemma 2";
-      document.getElementById("gemma-exec-summary").innerHTML = (AI_ANALYSIS.executive_summary || "").replace(/\\n/g, '<br>');
+       document.getElementById("gemma-exec-summary").innerText = AI_ANALYSIS.executive_summary || "";
       document.getElementById("gemma-modularity-text").innerText = AI_ANALYSIS.modularity_analysis || "";
 
       const patternsList = document.getElementById("gemma-patterns-list");
       if (AI_ANALYSIS.design_patterns && AI_ANALYSIS.design_patterns.length > 0) {
         patternsList.innerHTML = AI_ANALYSIS.design_patterns.map(p => `
           <div class="pattern-card">
-            <div class="pattern-title">${p.name}</div>
-            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">${p.description}</div>
+             <div class="pattern-title">${escapeHtml(p.name)}</div>
+             <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description)}</div>
           </div>
         `).join('');
       } else {
@@ -2238,7 +2480,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       const recsList = document.getElementById("gemma-recs-list");
       if (AI_ANALYSIS.recommendations && AI_ANALYSIS.recommendations.length > 0) {
-        recsList.innerHTML = AI_ANALYSIS.recommendations.map(r => `<li style="margin-bottom:4px;">${r}</li>`).join('');
+         recsList.innerHTML = AI_ANALYSIS.recommendations.map(r => `<li style="margin-bottom:4px;">${escapeHtml(r)}</li>`).join('');
       }
 
       if (AI_ANALYSIS.circular_dependency_fixes && AI_ANALYSIS.circular_dependency_fixes.length > 0) {
@@ -2246,9 +2488,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         remedySec.style.display = "block";
         document.getElementById("gemma-cycle-remedies").innerHTML = AI_ANALYSIS.circular_dependency_fixes.map(f => `
           <div class="cycle-card" style="border-color:rgba(239, 68, 68, 0.4);">
-            <div style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle: ${f.cycle}</div>
-            <div style="font-size:11.5px; color:#fecaca; margin-top:2px;">Root cause: ${f.root_cause}</div>
-            <div style="font-size:11px; color:#94a3b8; margin-top:4px; white-space:pre-line; line-height:1.4;">${f.remediation_recipe}</div>
+             <div style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle: ${escapeHtml(f.cycle)}</div>
+             <div style="font-size:11.5px; color:#fecaca; margin-top:2px;">Root cause: ${escapeHtml(f.root_cause)}</div>
+             <div style="font-size:11px; color:#94a3b8; margin-top:4px; white-space:pre-line; line-height:1.4;">${escapeHtml(f.remediation_recipe)}</div>
           </div>
         `).join('');
       }
@@ -2276,7 +2518,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         modalList.innerHTML = CYCLES.map((cycle, i) => {
           const chainHtml = cycle.map((node, idx) => `
-            <span>${node}</span>
+             <span>${escapeHtml(node)}</span>
             ${idx < cycle.length - 1 ? '<span style="color:#ef4444; font-weight:700;">➔</span>' : ''}
           `).join('');
 
@@ -2284,7 +2526,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="cycle-card">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle #${i+1} (${cycle.length - 1} steps)</span>
-                <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${JSON.stringify(cycle)})'>
+                 <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${escapeHtml(JSON.stringify(cycle))})'>
                   Highlight in Graph
                 </button>
               </div>
@@ -2366,13 +2608,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           const details = data.class_details?.[c];
           const bases = details?.bases?.length ? `(${details.bases.join(', ')})` : '';
           const methods = details?.methods?.length 
-            ? details.methods.map(m => `<div class="method-sig"><code>${m}</code></div>`).join('') 
+             ? details.methods.map(m => `<div class="method-sig"><code>${escapeHtml(m)}</code></div>`).join('')
             : '<div style="font-size:11px; color:var(--text-faint); margin:2px 0;">No public methods</div>';
 
           return `
             <div class="class-card">
               <div class="class-header">
-                <span class="class-kw">class</span> <strong style="color:#ffffff;">${c}</strong> <span class="class-bases">${bases}</span>
+                 <span class="class-kw">class</span> <strong style="color:#ffffff;">${escapeHtml(c)}</strong> <span class="class-bases">${escapeHtml(bases)}</span>
               </div>
               <div class="class-methods">
                 ${methods}
@@ -2388,7 +2630,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${f}</span>`).join("");
+         fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${escapeHtml(f)}</span>`).join("");
       } else {
         document.getElementById("insp-functions-section").style.display = "none";
       }
@@ -2397,8 +2639,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const depsContainer = document.getElementById("insp-deps");
       if (data.internal_dependencies.length > 0) {
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${d}');">
-            <span>↳ ${d}</span>
+           <div class="dep-link" onclick="inspectModule(${escapeHtml(JSON.stringify(d))}); highlightNodeConnections(${escapeHtml(JSON.stringify(d))});">
+             <span>↳ ${escapeHtml(d)}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
         `).join("");
@@ -2410,8 +2652,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const impByContainer = document.getElementById("insp-imported-by");
       if (data.imported_by && data.imported_by.length > 0) {
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${ib}');">
-            <span>↲ ${ib}</span>
+           <div class="dep-link" onclick="inspectModule(${escapeHtml(JSON.stringify(ib))}); highlightNodeConnections(${escapeHtml(JSON.stringify(ib))});">
+             <span>↲ ${escapeHtml(ib)}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
         `).join("");
@@ -2423,7 +2665,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const extContainer = document.getElementById("insp-ext");
       if (data.external_dependencies && data.external_dependencies.length > 0) {
         document.getElementById("insp-ext-section").style.display = "block";
-        extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${e}</span>`).join("");
+         extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${escapeHtml(e)}</span>`).join("");
       } else {
         document.getElementById("insp-ext-section").style.display = "none";
       }
@@ -2432,7 +2674,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const stdlibContainer = document.getElementById("insp-stdlib");
       if (data.stdlib_dependencies && data.stdlib_dependencies.length > 0) {
         document.getElementById("insp-stdlib-section").style.display = "block";
-        stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${s}</span>`).join("");
+         stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${escapeHtml(s)}</span>`).join("");
       } else {
         document.getElementById("insp-stdlib-section").style.display = "none";
       }
@@ -2602,31 +2844,40 @@ def build_unified_html(
     summary: Dict[str, Any],
     ai_analysis: Optional[Dict[str, Any]] = None
 ) -> str:
-    summary_json = json.dumps(summary, indent=None)
+    def safe_json(value: Any) -> str:
+        """Embed JSON in a script tag without allowing ``</script>`` breaks."""
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+    summary_json = safe_json(summary)
     cycles = detect_circular_dependencies(summary)
-    cycles_json = json.dumps(cycles)
-    ai_analysis_json = json.dumps(ai_analysis or {})
+    cycles_json = safe_json(cycles)
+    ai_analysis_json = safe_json(ai_analysis or {})
 
     total_files = len(summary)
     total_classes = sum(len(d.get("classes", [])) for d in summary.values())
     total_functions = sum(d.get("all_functions_count", len(d.get("functions", []))) for d in summary.values())
     total_loc = sum(d.get("loc", 0) for d in summary.values())
     total_deps = sum(len(d.get("internal_dependencies", [])) for d in summary.values())
+    metrics = compute_graph_metrics(summary, cycles)
 
     content = HTML_TEMPLATE
     replacements = {
-        "__REPO_NAME__": repo_name,
+        "__REPO_NAME__": html_escape(repo_name),
+        "__REPO_NAME_JS__": safe_json(repo_name),
         "__SUMMARY_JSON__": summary_json,
         "__CYCLES_JSON__": cycles_json,
         "__AI_ANALYSIS_JSON__": ai_analysis_json,
-        "__MERMAID_TD__": json.dumps(mermaid_td),
-        "__MERMAID_LR__": json.dumps(mermaid_lr),
+        "__MERMAID_TD__": safe_json(mermaid_td),
+        "__MERMAID_LR__": safe_json(mermaid_lr),
         "__TOTAL_FILES__": str(total_files),
         "__TOTAL_CLASSES__": str(total_classes),
         "__TOTAL_FUNCS__": str(total_functions),
         "__TOTAL_DEPS__": str(total_deps),
         "__TOTAL_LOC__": str(total_loc),
-        "__CYCLES_COUNT__": str(len(cycles))
+        "__CYCLES_COUNT__": str(len(cycles)),
+        "__AVG_FAN_OUT__": str(metrics["average_fan_out"]),
+        "__SCAN_TIME__": "deterministic",
+        "__METRICS_JSON__": safe_json(metrics)
     }
 
     for placeholder, val in replacements.items():
@@ -2706,7 +2957,7 @@ def parse_args():
         "--ai-provider",
         choices=["auto", "ollama", "local", "groq", "hf"],
         default="auto",
-        help="Gemma inference provider (default: auto; checks local Ollama, llama.cpp, or cloud endpoints)"
+        help="Gemma inference provider (default: auto; local Ollama/llama.cpp only; hosted providers are explicit)"
     )
     parser.add_argument(
         "--ai-key",
@@ -2761,15 +3012,24 @@ def main():
 
     repo_name = resolve_repo_name(target_path, args.name)
 
-    print("\n" + "=" * 60)
-    print(f" RepoGraph: {repo_name}")
-    print("=" * 60)
+    def announce(message: str) -> None:
+        print(message, file=sys.stderr if args.json else sys.stdout)
 
-    print(f"\n[1/4] Parsing repository: {target_path}...")
-    summary = scan_repository(target_path, extra_excludes=args.exclude)
+    started = time.perf_counter()
+    announce("\n" + "=" * 60)
+    announce(f" RepoGraph: {repo_name}")
+    announce("=" * 60)
+
+    announce(f"\n[1/4] Parsing repository: {target_path}...")
+    summary, diagnostics = scan_repository(
+        target_path,
+        extra_excludes=args.exclude,
+        return_diagnostics=True,
+        quiet=args.json,
+    )
 
     if not summary:
-        print(f"[!] No Python files found in: {target_path}")
+        print(f"[!] No Python files found in: {target_path}", file=sys.stderr)
         sys.exit(1)
 
     total_classes = sum(len(d["classes"]) for d in summary.values())
@@ -2777,21 +3037,28 @@ def main():
     total_deps = sum(len(d["internal_dependencies"]) for d in summary.values())
     cycles = detect_circular_dependencies(summary)
 
-    print(f"      Parsed {len(summary)} modules, {total_classes} classes, {total_funcs} functions, {total_deps} edges.")
+    announce(f"      Parsed {len(summary)} modules, {total_classes} classes, {total_funcs} functions, {total_deps} edges.")
     if cycles:
-        print(f"      [!] Warning: {len(cycles)} circular dependencies detected!")
+        announce(f"      [!] Warning: {len(cycles)} circular dependencies detected!")
 
     if args.json:
-        print(json.dumps(summary, indent=2))
+        report = build_json_report(
+            summary,
+            repo_name,
+            cycles,
+            diagnostics=diagnostics,
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        print(json.dumps(report, indent=2, ensure_ascii=False))
         return
 
-    print("[2/4] Constructing architectural dependency graph...")
+    announce("[2/4] Constructing architectural dependency graph...")
     mermaid_td = generate_bulletproof_ast_mermaid(summary, direction="TD")
     mermaid_lr = generate_bulletproof_ast_mermaid(summary, direction="LR")
 
     ai_analysis = None
     if args.ai:
-        print("[3/4] Running Gemma AI Architectural Intelligence Engine...")
+        announce("[3/4] Running Gemma AI Architectural Intelligence Engine...")
         ai_analysis = GemmaArchitectEngine.analyze_architecture(
             summary=summary,
             cycles=cycles,
@@ -2800,18 +3067,31 @@ def main():
             provider=args.ai_provider,
             api_key=args.ai_key
         )
-        print(f"      Engine: {ai_analysis.get('engine', 'Google Gemma 2')}")
-        print(f"      Architecture Health Score: {ai_analysis.get('health_score', 'A')}")
+        announce(f"      Engine: {ai_analysis.get('engine', 'Google Gemma 2')}")
+        announce(f"      Architecture Health Score: {ai_analysis.get('health_score', 'A')}")
         if ai_analysis.get("design_patterns"):
             patterns_str = ", ".join(p["name"] for p in ai_analysis["design_patterns"][:2])
-            print(f"      Identified Design Patterns: {patterns_str}")
+            announce(f"      Identified Design Patterns: {patterns_str}")
     else:
-        print("[3/4] Skipping Gemma AI analysis (--no-ai specified)...")
+        announce("[3/4] Skipping Gemma AI analysis (--no-ai specified)...")
 
-    print(f"[4/4] Exporting artifacts to: {output_dir}...")
+    announce(f"[4/4] Exporting artifacts to: {output_dir}...")
     arch_md_path = output_dir / "ARCHITECTURE.md"
     with open(arch_md_path, "w", encoding="utf-8") as f:
         f.write(f"# Architecture Overview: {repo_name}\n\n```mermaid\n{mermaid_td}\n```\n")
+
+        report_metrics = compute_graph_metrics(summary, cycles)
+        f.write("\n## Deterministic Metrics\n\n")
+        f.write("| Metric | Value |\n| --- | ---: |\n")
+        f.write(f"| Python modules | {report_metrics['modules']} |\n")
+        f.write(f"| Lines of code | {report_metrics['lines_of_code']} |\n")
+        f.write(f"| Classes | {report_metrics['classes']} |\n")
+        f.write(f"| Functions | {report_metrics['functions']} |\n")
+        f.write(f"| Internal dependency edges | {report_metrics['internal_edges']} |\n")
+        f.write(f"| Average fan-out | {report_metrics['average_fan_out']} |\n")
+        f.write(f"| Circular dependency chains | {report_metrics['cycle_count']} |\n")
+        if diagnostics.get("parse_errors"):
+            f.write("\n> [!WARNING]\n> Some Python files could not be parsed; inspect the diagnostics from `--json`.\n")
 
         if ai_analysis:
             f.write(f"\n## 🤖 AI Architecture Analysis (Powered by Google Gemma)\n\n")
@@ -2842,10 +3122,10 @@ def main():
         with open(index_html_path, "w", encoding="utf-8") as f:
             f.write(html_page)
 
-    print("\nSuccess! Artifacts generated:")
-    print(f"  Markdown:    {arch_md_path}")
+    announce("\nSuccess! Artifacts generated:")
+    announce(f"  Markdown:    {arch_md_path}")
     if not args.no_html:
-        print(f"  Interactive: {output_dir / 'index.html'} & {output_dir / 'repograph.html'}\n")
+        announce(f"  Interactive: {output_dir / 'index.html'} & {output_dir / 'repograph.html'}\n")
 
     if args.serve:
         serve_directory(port=args.port, target_dir=str(output_dir), open_browser=not args.no_browser)

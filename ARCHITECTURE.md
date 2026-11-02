@@ -1,4 +1,4 @@
-# Architecture Overview: demo_project
+# Architecture Overview: RepoGraph Demo
 
 ```mermaid
 graph TD
@@ -41,10 +41,22 @@ graph TD
   core_engine_py --> utils_crypto_py
 ```
 
+## Deterministic Metrics
+
+| Metric | Value |
+| --- | ---: |
+| Python modules | 6 |
+| Lines of code | 105 |
+| Classes | 6 |
+| Functions | 2 |
+| Internal dependency edges | 7 |
+| Average fan-out | 1.17 |
+| Circular dependency chains | 0 |
+
 ## 🤖 AI Architecture Analysis (Powered by Google Gemma)
 
 ### Executive Summary
-**demo_project** exhibits a structured **Clean N-Tier Layered Architecture** architecture comprising 6 Python modules across 6 functional layers. Execution coordinates through clear boundaries (API & Interface, Application Entry, Configuration), delivering high operational cohesion with 7 cross-module dependency links.
+**RepoGraph Demo** exhibits a structured **Clean N-Tier Layered Architecture** architecture comprising 6 Python modules across 6 functional layers. Execution coordinates through clear boundaries (API & Interface, Application Entry, Configuration), delivering high operational cohesion with 7 cross-module dependency links.
 
 ### Architecture Health: A
 Exceptional decoupling. Strict acyclic dependency flow with well-balanced fan-in and fan-out.

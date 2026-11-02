@@ -42,9 +42,9 @@ RepoGraph deterministically parses your code's Abstract Syntax Tree (AST), clust
 When designing AI developer tooling, the default instinct for many is to pipe code into a closed cloud LLM API (like OpenAI or Claude). For RepoGraph, **closed AI was a complete non-starter**. Open innovation through **Google's open-weight Gemma family** was the foundational architectural decision for three critical reasons:
 
 ### 1. Absolute Data Sovereignty & IP Privacy
-Private repositories, fintech codebases, healthcare backends, and proprietary algorithms **cannot leave developer machines**. Enterprise compliance (SOC2, HIPAA, GDPR) strictly prohibits exfiltrating unreleased source code to closed corporate cloud APIs where data might be retained, logged, or used for model training.
+Private repositories, fintech codebases, healthcare backends, and proprietary algorithms often cannot leave developer machines. Compliance, IP, and cost constraints make hidden cloud inference a poor default.
 
-Because **Gemma 2 (`gemma2:2b`, `gemma2:9b`) is fully open-weight**, developers can run it 100% locally on their own laptop or air-gapped workstations using Ollama or llama.cpp. Not a single line of proprietary source code ever crosses the network boundary.
+Because **Gemma 2 (`gemma2:2b`, `gemma2:9b`) is fully open-weight**, developers can run it locally on their own laptop or air-gapped workstations using Ollama or llama.cpp. RepoGraph's default provider is local-first; hosted providers are explicit opt-ins.
 
 ### 2. Zero Token Costs & Zero Rate Limits
 Closed APIs charge per token. A developer analyzing large repositories with dozens of modules repeatedly during daily refactoring cycles would quickly accumulate non-trivial API bills and hit rate limits. 
@@ -55,7 +55,7 @@ With open-weight Gemma, the marginal cost of running architectural analysis is *
 Closed LLMs hallucinate dependencies, miss edge cases, and take 10+ seconds to process raw files. 
 
 Open innovation allowed us to construct a **hybrid two-tier architecture**:
-- **Tier 1 (Compiler Speed):** Python's open standard library `ast` parses class hierarchies, method signatures, and imports deterministically in **< 0.05 seconds**.
+- **Tier 1 (Deterministic facts):** Python's open standard library `ast` parses class hierarchies, method signatures, imports, cycles, and graph metrics without an LLM.
 - **Tier 2 (Open-Weight Reasoning):** Google's lightweight `gemma2:2b` digests the extracted semantic structure to identify design patterns, calculate architectural health scores, and write refactoring recipes.
 
 If the developer is offline on an airplane without an active local AI daemon, RepoGraph's built-in offline synthesis engine kicks in gracefully. The tool *never* fails.
@@ -136,7 +136,7 @@ Clicking on any file in the interactive web canvas opens an inspector drawer whe
 
 ## 🎨 Interactive Blueprint Highlights
 
-The generated `index.html` is a standalone, self-contained single-page application with zero third-party JavaScript dependencies:
+The generated `index.html` is a single-page application with system-font fallbacks and an optional Mermaid CDN enhancement. If Mermaid is unavailable, RepoGraph uses its built-in SVG renderer:
 
 - **Infinite Vector Canvas:** Smooth drag-to-pan, scroll-to-zoom, and mobile touch pinch-to-zoom using a custom SVG transform matrix engine.
 - **Bidirectional Pathway Lighting:** Click any module to illuminate callers in **emerald green** and dependencies in **cyan**, with glowing vector edges while dimming unrelated code.
@@ -180,7 +180,7 @@ RepoGraph includes a comprehensive multi-platform unit test suite tested on Wind
 - Resilient HTML generation
 
 ```bash
-python -m unittest discover tests
+python -m unittest discover -s tests -p "test*.py"
 # Ran 21 tests in 0.525s - OK!
 ```
 

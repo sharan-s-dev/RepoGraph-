@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RepoGraph - demo_project | Codebase Architecture Explorer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <title>RepoGraph - RepoGraph Demo | Codebase Architecture Explorer</title>
+  <!-- The dashboard keeps system-font fallbacks so generated artifacts remain usable offline. -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
     :root {
@@ -27,8 +25,8 @@
       --purple: #8b5cf6;
       --purple-glow: rgba(139, 92, 246, 0.35);
       --indigo: #818cf8;
-      --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
+       --font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -758,7 +756,7 @@
     <div class="brand-group">
       <div class="logo-badge">RG</div>
       <div class="title-group">
-        <h1>demo_project</h1>
+        <h1>RepoGraph Demo</h1>
         <p>Codebase Architecture & Dependency Graph Explorer</p>
       </div>
     </div>
@@ -813,7 +811,7 @@
         </div>
         <div class="metric-card">
           <div class="label">Funcs</div>
-          <div class="value">10</div>
+          <div class="value">2</div>
         </div>
         <div class="metric-card">
           <div class="label">Edges</div>
@@ -972,12 +970,19 @@
   <div class="modal-overlay" id="overview-modal" onclick="closeOverviewModalOnOut(event)">
     <div class="modal-dialog">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3>Architecture Overview: demo_project</h3>
+        <h3>Architecture Overview: RepoGraph Demo</h3>
         <button class="control-btn" onclick="closeOverviewModal()">✕</button>
       </div>
-      <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
-        Architectural layers and execution boundaries in <strong>demo_project</strong>.
-      </p>
+       <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 4px;">
+         Architectural layers and execution boundaries in <strong>RepoGraph Demo</strong>.
+       </p>
+
+       <div class="metrics-grid" style="margin-top:14px;">
+         <div class="metric-card"><div class="label">LOC</div><div class="value">105</div></div>
+         <div class="metric-card"><div class="label">Avg fan-out</div><div class="value">1.17</div></div>
+         <div class="metric-card"><div class="label">Cycles</div><div class="value">0</div></div>
+         <div class="metric-card"><div class="label">Scan ms</div><div class="value">deterministic</div></div>
+       </div>
 
       <div class="guide-step">
         <h4>1. Application Entry Points</h4>
@@ -1022,12 +1027,13 @@
   <div id="toast">Diagram copied to clipboard!</div>
 
   <script>
-    const SUMMARY = {"app.py": {"id": "app_py", "file": "app.py", "layer": "Application Entry", "docstring": "Demo Application Entry Point.", "full_docstring": "Demo Application Entry Point.\nInitializes the HTTP server and coordinates core services.", "classes": ["Application"], "class_details": {"Application": {"methods": ["start()"], "bases": [], "docstring": "Main application lifecycle controller."}}, "functions": ["start()"], "all_functions_count": 1, "internal_dependencies": ["api/routes.py", "config/settings.py", "core/engine.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": true, "loc": 23, "complexity": 6, "imported_by": []}, "api/routes.py": {"id": "api_routes_py", "file": "api/routes.py", "layer": "API & Interface", "docstring": "API Routing & Request Handlers.", "full_docstring": "API Routing & Request Handlers.\nExposes endpoints for user authentication and transaction processing.", "classes": ["APIRouter"], "class_details": {"APIRouter": {"methods": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "bases": [], "docstring": ""}}, "functions": ["get_user_profile(user_id)", "register_endpoint(payload)", "listen()"], "all_functions_count": 3, "internal_dependencies": ["core/engine.py", "models/user.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 20, "complexity": 7, "imported_by": ["app.py"]}, "config/settings.py": {"id": "config_settings_py", "file": "config/settings.py", "layer": "Configuration", "docstring": "Environment configuration management and defaults.", "full_docstring": "Environment configuration management and defaults.", "classes": ["AppConfig"], "class_details": {"AppConfig": {"methods": [], "bases": [], "docstring": ""}}, "functions": [], "all_functions_count": 0, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["os"], "has_entry_point": false, "loc": 10, "complexity": 4, "imported_by": ["app.py"]}, "core/engine.py": {"id": "core_engine_py", "file": "core/engine.py", "layer": "Core & Domain", "docstring": "Core Workflow Execution Engine.", "full_docstring": "Core Workflow Execution Engine.\nOrchestrates domain validation, cryptographic verification, and state transitions.", "classes": ["WorkflowEngine"], "class_details": {"WorkflowEngine": {"methods": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "bases": [], "docstring": ""}}, "functions": ["fetch_profile(user_id)", "register_user(user)", "dispatch_event(event_name, payload)"], "all_functions_count": 3, "internal_dependencies": ["models/user.py", "utils/crypto.py"], "external_dependencies": [], "stdlib_dependencies": [], "has_entry_point": false, "loc": 22, "complexity": 7, "imported_by": ["app.py", "api/routes.py"]}, "models/user.py": {"id": "models_user_py", "file": "models/user.py", "layer": "Data & Storage", "docstring": "Data entities and schema definitions for user accounts and security roles.", "full_docstring": "Data entities and schema definitions for user accounts and security roles.", "classes": ["UserRole", "UserModel"], "class_details": {"UserRole": {"methods": [], "bases": ["str", "Enum"], "docstring": ""}, "UserModel": {"methods": ["to_dict()"], "bases": [], "docstring": ""}}, "functions": ["to_dict()"], "all_functions_count": 1, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["enum"], "has_entry_point": false, "loc": 17, "complexity": 7, "imported_by": ["api/routes.py", "core/engine.py"]}, "utils/crypto.py": {"id": "utils_crypto_py", "file": "utils/crypto.py", "layer": "Utilities & Shared", "docstring": "Cryptographic utility functions and security hashing helpers.", "full_docstring": "Cryptographic utility functions and security hashing helpers.", "classes": [], "class_details": {}, "functions": ["hash_secret(value)", "generate_token(prefix)"], "all_functions_count": 2, "internal_dependencies": [], "external_dependencies": [], "stdlib_dependencies": ["hashlib", "secrets"], "has_entry_point": false, "loc": 13, "complexity": 3, "imported_by": ["core/engine.py"]}};
+    const SUMMARY = {"app.py":{"id":"app_py","file":"app.py","layer":"Application Entry","docstring":"Demo Application Entry Point.","full_docstring":"Demo Application Entry Point.\nInitializes the HTTP server and coordinates core services.","classes":["Application"],"class_details":{"Application":{"methods":["start()"],"bases":[],"docstring":"Main application lifecycle controller."}},"functions":[],"all_functions_count":0,"internal_dependencies":["api/routes.py","config/settings.py","core/engine.py"],"external_dependencies":[],"stdlib_dependencies":[],"has_entry_point":true,"loc":23,"complexity":6,"imported_by":[]},"api/routes.py":{"id":"api_routes_py","file":"api/routes.py","layer":"API \u0026 Interface","docstring":"API Routing \u0026 Request Handlers.","full_docstring":"API Routing \u0026 Request Handlers.\nExposes endpoints for user authentication and transaction processing.","classes":["APIRouter"],"class_details":{"APIRouter":{"methods":["get_user_profile(user_id)","register_endpoint(payload)","listen()"],"bases":[],"docstring":""}},"functions":[],"all_functions_count":0,"internal_dependencies":["core/engine.py","models/user.py"],"external_dependencies":[],"stdlib_dependencies":[],"has_entry_point":false,"loc":20,"complexity":7,"imported_by":["app.py"]},"config/settings.py":{"id":"config_settings_py","file":"config/settings.py","layer":"Configuration","docstring":"Environment configuration management and defaults.","full_docstring":"Environment configuration management and defaults.","classes":["AppConfig"],"class_details":{"AppConfig":{"methods":[],"bases":[],"docstring":""}},"functions":[],"all_functions_count":0,"internal_dependencies":[],"external_dependencies":[],"stdlib_dependencies":["os"],"has_entry_point":false,"loc":10,"complexity":4,"imported_by":["app.py"]},"core/engine.py":{"id":"core_engine_py","file":"core/engine.py","layer":"Core \u0026 Domain","docstring":"Core Workflow Execution Engine.","full_docstring":"Core Workflow Execution Engine.\nOrchestrates domain validation, cryptographic verification, and state transitions.","classes":["WorkflowEngine"],"class_details":{"WorkflowEngine":{"methods":["fetch_profile(user_id)","register_user(user)","dispatch_event(event_name, payload)"],"bases":[],"docstring":""}},"functions":[],"all_functions_count":0,"internal_dependencies":["models/user.py","utils/crypto.py"],"external_dependencies":[],"stdlib_dependencies":[],"has_entry_point":false,"loc":22,"complexity":7,"imported_by":["app.py","api/routes.py"]},"models/user.py":{"id":"models_user_py","file":"models/user.py","layer":"Data \u0026 Storage","docstring":"Data entities and schema definitions for user accounts and security roles.","full_docstring":"Data entities and schema definitions for user accounts and security roles.","classes":["UserRole","UserModel"],"class_details":{"UserRole":{"methods":[],"bases":["str","Enum"],"docstring":""},"UserModel":{"methods":["to_dict()"],"bases":[],"docstring":""}},"functions":[],"all_functions_count":0,"internal_dependencies":[],"external_dependencies":[],"stdlib_dependencies":["enum"],"has_entry_point":false,"loc":17,"complexity":7,"imported_by":["api/routes.py","core/engine.py"]},"utils/crypto.py":{"id":"utils_crypto_py","file":"utils/crypto.py","layer":"Utilities \u0026 Shared","docstring":"Cryptographic utility functions and security hashing helpers.","full_docstring":"Cryptographic utility functions and security hashing helpers.","classes":[],"class_details":{},"functions":["hash_secret(value)","generate_token(prefix)"],"all_functions_count":2,"internal_dependencies":[],"external_dependencies":[],"stdlib_dependencies":["hashlib","secrets"],"has_entry_point":false,"loc":13,"complexity":3,"imported_by":["core/engine.py"]}};
     const CYCLES = [];
-    const AI_ANALYSIS = {"engine": "Google Gemma 2 (gemma2:2b Architecture Engine)", "mode": "offline-synthesis", "health_score": "A", "executive_summary": "**demo_project** exhibits a structured **Clean N-Tier Layered Architecture** architecture comprising 6 Python modules across 6 functional layers. Execution coordinates through clear boundaries (API & Interface, Application Entry, Configuration), delivering high operational cohesion with 7 cross-module dependency links.", "modularity_analysis": "Exceptional decoupling. Strict acyclic dependency flow with well-balanced fan-in and fan-out.", "design_patterns": [{"name": "Clean N-Tier Layered Architecture", "description": "Strict separation between interface endpoints, core business orchestrator, and persistent entity storage."}, {"name": "Dispatcher & Facade Pattern", "description": "Centralized interface routing layer that encapsulates endpoint dispatching from domain execution."}, {"name": "Core Domain Workflow Orchestrator", "description": "Encapsulated business logic coordinator driving application operations and managing state transitions."}, {"name": "Data Entity & Domain Model", "description": "Explicit entity classes encapsulating attributes and schema invariants."}, {"name": "Stateless Shared Service Provider", "description": "Shared utility helpers providing reusable cryptographic, string, or mathematical primitives."}], "recommendations": ["Preserve downward dependency flows: enforce that 'API & Interface' only calls into lower tiers, never in reverse.", "Maintain zero circular imports to guarantee sub-millisecond cold start times and clean unit test isolation."], "circular_dependency_fixes": [], "module_roles": {"app.py": "System entry point & bootstrap controller.", "api/routes.py": "Endpoint dispatcher and request routing interface.", "config/settings.py": "Application configuration and environment parameters.", "core/engine.py": "Core domain orchestrator executing primary business logic.", "models/user.py": "Domain entity model managing structured state.", "utils/crypto.py": "Reusable stateless shared utility primitives."}};
-    const MERMAID_TD = "graph TD\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
-    const MERMAID_LR = "graph LR\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API & Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core & Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data & Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities & Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --> api_routes_py\n  app_py --> config_settings_py\n  app_py --> core_engine_py\n  api_routes_py --> core_engine_py\n  api_routes_py --> models_user_py\n  core_engine_py --> models_user_py\n  core_engine_py --> utils_crypto_py";
-    const REPO_NAME = "demo_project";
+    const AI_ANALYSIS = {"engine":"Google Gemma 2 (gemma2:2b) Architecture Engine","mode":"offline-synthesis","health_score":"A","executive_summary":"**RepoGraph Demo** exhibits a structured **Clean N-Tier Layered Architecture** architecture comprising 6 Python modules across 6 functional layers. Execution coordinates through clear boundaries (API \u0026 Interface, Application Entry, Configuration), delivering high operational cohesion with 7 cross-module dependency links.","modularity_analysis":"Exceptional decoupling. Strict acyclic dependency flow with well-balanced fan-in and fan-out.","design_patterns":[{"name":"Clean N-Tier Layered Architecture","description":"Strict separation between interface endpoints, core business orchestrator, and persistent entity storage."},{"name":"Dispatcher \u0026 Facade Pattern","description":"Centralized interface routing layer that encapsulates endpoint dispatching from domain execution."},{"name":"Core Domain Workflow Orchestrator","description":"Encapsulated business logic coordinator driving application operations and managing state transitions."},{"name":"Data Entity \u0026 Domain Model","description":"Explicit entity classes encapsulating attributes and schema invariants."},{"name":"Stateless Shared Service Provider","description":"Shared utility helpers providing reusable cryptographic, string, or mathematical primitives."}],"recommendations":["Preserve downward dependency flows: enforce that 'API \u0026 Interface' only calls into lower tiers, never in reverse.","Maintain zero circular imports to guarantee sub-millisecond cold start times and clean unit test isolation."],"circular_dependency_fixes":[],"module_roles":{"app.py":"System entry point \u0026 bootstrap controller.","api/routes.py":"Endpoint dispatcher and request routing interface.","config/settings.py":"Application configuration and environment parameters.","core/engine.py":"Core domain orchestrator executing primary business logic.","models/user.py":"Domain entity model managing structured state.","utils/crypto.py":"Reusable stateless shared utility primitives."}};
+    const MERMAID_TD = "graph TD\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API \u0026 Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core \u0026 Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data \u0026 Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities \u0026 Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --\u003e api_routes_py\n  app_py --\u003e config_settings_py\n  app_py --\u003e core_engine_py\n  api_routes_py --\u003e core_engine_py\n  api_routes_py --\u003e models_user_py\n  core_engine_py --\u003e models_user_py\n  core_engine_py --\u003e utils_crypto_py";
+    const MERMAID_LR = "graph LR\n  classDef entryNode fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;\n  classDef apiNode fill:#083344,stroke:#06b6d4,stroke-width:1.5px,color:#f8fafc;\n  classDef coreNode fill:#064e3b,stroke:#10b981,stroke-width:1.5px,color:#f8fafc;\n  classDef dataNode fill:#451a03,stroke:#f59e0b,stroke-width:1.5px,color:#f8fafc;\n  classDef utilNode fill:#1e293b,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;\n  classDef defaultNode fill:#0f172a,stroke:#64748b,stroke-width:1.5px,color:#f8fafc;\n  subgraph layer_Application_Entry[\"Application Entry\"]\n    app_py[\"app.py | Application\"]:::entryNode\n  end\n  style layer_Application_Entry fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_API___Interface[\"API \u0026 Interface\"]\n    api_routes_py[\"api/routes.py | APIRouter\"]:::apiNode\n  end\n  style layer_API___Interface fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Configuration[\"Configuration\"]\n    config_settings_py[\"config/settings.py | AppConfig\"]:::utilNode\n  end\n  style layer_Configuration fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Core___Domain[\"Core \u0026 Domain\"]\n    core_engine_py[\"core/engine.py | WorkflowEngine\"]:::coreNode\n  end\n  style layer_Core___Domain fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Data___Storage[\"Data \u0026 Storage\"]\n    models_user_py[\"models/user.py | UserRole, UserModel\"]:::dataNode\n  end\n  style layer_Data___Storage fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  subgraph layer_Utilities___Shared[\"Utilities \u0026 Shared\"]\n    utils_crypto_py[\"utils/crypto.py | hash_secret, generate_token\"]:::utilNode\n  end\n  style layer_Utilities___Shared fill:#0b1120,stroke:#1e293b,stroke-width:1px,stroke-dasharray: 4 4,color:#94a3b8\n  app_py --\u003e api_routes_py\n  app_py --\u003e config_settings_py\n  app_py --\u003e core_engine_py\n  api_routes_py --\u003e core_engine_py\n  api_routes_py --\u003e models_user_py\n  core_engine_py --\u003e models_user_py\n  core_engine_py --\u003e utils_crypto_py";
+    const METRICS = {"modules":6,"classes":6,"functions":2,"lines_of_code":105,"internal_edges":7,"average_fan_out":1.17,"cycle_count":0,"orphan_modules":[],"hotspots":[{"file":"core/engine.py","fan_in":2,"fan_out":2,"score":4},{"file":"api/routes.py","fan_in":1,"fan_out":2,"score":3},{"file":"app.py","fan_in":0,"fan_out":3,"score":3},{"file":"models/user.py","fan_in":2,"fan_out":0,"score":2},{"file":"config/settings.py","fan_in":1,"fan_out":0,"score":1},{"file":"utils/crypto.py","fan_in":1,"fan_out":0,"score":1}],"layer_edges":{"API \u0026 Interface -\u003e Core \u0026 Domain":1,"API \u0026 Interface -\u003e Data \u0026 Storage":1,"Application Entry -\u003e API \u0026 Interface":1,"Application Entry -\u003e Configuration":1,"Application Entry -\u003e Core \u0026 Domain":1,"Core \u0026 Domain -\u003e Data \u0026 Storage":1,"Core \u0026 Domain -\u003e Utilities \u0026 Shared":1}};
+    const REPO_NAME = "RepoGraph Demo";
 
     let currentDirection = "TD";
     let selectedModule = null;
@@ -1213,21 +1219,71 @@
     }
 
     // --- MERMAID RENDERING & BIDIRECTIONAL PATHWAY LIGHTING ---
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'loose',
-      themeVariables: {
-        darkMode: true,
-        background: '#06080e',
-        primaryColor: '#0284c7',
-        primaryTextColor: '#f8fafc',
-        lineColor: '#38bdf8'
-      }
-    });
+    const mermaidAvailable = typeof mermaid !== "undefined";
+    if (mermaidAvailable) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        securityLevel: 'strict',
+        themeVariables: {
+          darkMode: true,
+          background: '#06080e',
+          primaryColor: '#0284c7',
+          primaryTextColor: '#f8fafc',
+          lineColor: '#38bdf8'
+        }
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[character]));
+    }
+
+    function renderNativeFallback() {
+      const entries = Object.entries(SUMMARY);
+      const columns = Math.max(1, Math.ceil(Math.sqrt(entries.length)));
+      const rows = Math.max(1, Math.ceil(entries.length / columns));
+      const width = currentDirection === "TD"
+        ? Math.max(900, columns * 220)
+        : Math.max(900, entries.length * 220);
+      const height = currentDirection === "TD"
+        ? Math.max(640, rows * 130 + 120)
+        : Math.max(460, entries.length * 92);
+      const positions = {};
+      entries.forEach(([file, data], index) => {
+        if (currentDirection === "TD") {
+          const col = index % columns;
+          const row = Math.floor(index / columns);
+          positions[file] = { x: 150 + col * 220, y: 100 + row * 130 };
+        } else {
+          positions[file] = { x: 150 + index * 220, y: 280 + ((index % 2) ? 90 : -90) };
+        }
+      });
+      const edgeMarkup = entries.flatMap(([file, data]) => (data.internal_dependencies || []).map(dep => {
+        const source = positions[file];
+        const target = positions[dep];
+        if (!source || !target) return '';
+        return `<g class="edgePath" id="edge-${escapeHtml(data.id)}-${escapeHtml(SUMMARY[dep].id)}"><path d="M ${source.x} ${source.y} L ${target.x} ${target.y}" fill="none" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#arrow)" /></g>`;
+      })).join('');
+      const nodeMarkup = entries.map(([file, data]) => {
+        const point = positions[file];
+        const label = data.classes?.length ? data.classes.slice(0, 2).join(', ') : (data.functions?.slice(0, 2).join(', ') || 'module');
+        return `<g class="node" id="flowchart-${escapeHtml(data.id)}-0" transform="translate(${point.x - 88},${point.y - 30})"><rect width="176" height="60" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" /><text x="88" y="24" text-anchor="middle" fill="#f8fafc" font-size="11">${escapeHtml(file.slice(-24))}</text><text x="88" y="43" text-anchor="middle" fill="#94a3b8" font-size="10">${escapeHtml(label.slice(0, 25))}</text></g>`;
+      }).join('');
+      panLayer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" /></marker></defs>${edgeMarkup}${nodeMarkup}</svg>`;
+      attachSvgNodeListeners();
+      requestAnimationFrame(() => fitToScreen(false));
+    }
 
     async function renderMermaidDiagram() {
       panLayer.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:20px;">Rendering architecture graph...</div>';
+      if (!mermaidAvailable) {
+        renderNativeFallback();
+        showToast("Mermaid CDN unavailable; using the offline graph renderer");
+        return;
+      }
       try {
         const rawCode = currentDirection === "TD" ? MERMAID_TD : MERMAID_LR;
         const uniqueId = "mermaid_svg_" + Date.now();
@@ -1439,11 +1495,11 @@
 
         item.innerHTML = `
           <div class="module-title">
-            <span style="overflow:hidden; text-overflow:ellipsis;">${file}</span>
-            <span class="tag-badge">${data.layer.split(' ')[0]}</span>
+             <span style="overflow:hidden; text-overflow:ellipsis;">${escapeHtml(file)}</span>
+             <span class="tag-badge">${escapeHtml(data.layer.split(' ')[0])}</span>
           </div>
           <div class="module-sub">
-            ${data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module')}
+             ${escapeHtml(data.classes.length ? data.classes.join(', ') : (data.functions.slice(0,3).join(', ') || 'module'))}
           </div>
         `;
         list.appendChild(item);
@@ -1466,15 +1522,15 @@
       if (!AI_ANALYSIS) return;
       document.getElementById("gemma-health-badge").innerText = "Health: " + (AI_ANALYSIS.health_score || "A");
       document.getElementById("gemma-engine-tag").innerText = AI_ANALYSIS.engine || "Powered by Google Gemma 2";
-      document.getElementById("gemma-exec-summary").innerHTML = (AI_ANALYSIS.executive_summary || "").replace(/\n/g, '<br>');
+       document.getElementById("gemma-exec-summary").innerText = AI_ANALYSIS.executive_summary || "";
       document.getElementById("gemma-modularity-text").innerText = AI_ANALYSIS.modularity_analysis || "";
 
       const patternsList = document.getElementById("gemma-patterns-list");
       if (AI_ANALYSIS.design_patterns && AI_ANALYSIS.design_patterns.length > 0) {
         patternsList.innerHTML = AI_ANALYSIS.design_patterns.map(p => `
           <div class="pattern-card">
-            <div class="pattern-title">${p.name}</div>
-            <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">${p.description}</div>
+             <div class="pattern-title">${escapeHtml(p.name)}</div>
+             <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description)}</div>
           </div>
         `).join('');
       } else {
@@ -1483,7 +1539,7 @@
 
       const recsList = document.getElementById("gemma-recs-list");
       if (AI_ANALYSIS.recommendations && AI_ANALYSIS.recommendations.length > 0) {
-        recsList.innerHTML = AI_ANALYSIS.recommendations.map(r => `<li style="margin-bottom:4px;">${r}</li>`).join('');
+         recsList.innerHTML = AI_ANALYSIS.recommendations.map(r => `<li style="margin-bottom:4px;">${escapeHtml(r)}</li>`).join('');
       }
 
       if (AI_ANALYSIS.circular_dependency_fixes && AI_ANALYSIS.circular_dependency_fixes.length > 0) {
@@ -1491,9 +1547,9 @@
         remedySec.style.display = "block";
         document.getElementById("gemma-cycle-remedies").innerHTML = AI_ANALYSIS.circular_dependency_fixes.map(f => `
           <div class="cycle-card" style="border-color:rgba(239, 68, 68, 0.4);">
-            <div style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle: ${f.cycle}</div>
-            <div style="font-size:11.5px; color:#fecaca; margin-top:2px;">Root cause: ${f.root_cause}</div>
-            <div style="font-size:11px; color:#94a3b8; margin-top:4px; white-space:pre-line; line-height:1.4;">${f.remediation_recipe}</div>
+             <div style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle: ${escapeHtml(f.cycle)}</div>
+             <div style="font-size:11.5px; color:#fecaca; margin-top:2px;">Root cause: ${escapeHtml(f.root_cause)}</div>
+             <div style="font-size:11px; color:#94a3b8; margin-top:4px; white-space:pre-line; line-height:1.4;">${escapeHtml(f.remediation_recipe)}</div>
           </div>
         `).join('');
       }
@@ -1521,7 +1577,7 @@
 
         modalList.innerHTML = CYCLES.map((cycle, i) => {
           const chainHtml = cycle.map((node, idx) => `
-            <span>${node}</span>
+             <span>${escapeHtml(node)}</span>
             ${idx < cycle.length - 1 ? '<span style="color:#ef4444; font-weight:700;">➔</span>' : ''}
           `).join('');
 
@@ -1529,7 +1585,7 @@
             <div class="cycle-card">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span style="font-size:12px; font-weight:600; color:#fca5a5;">Cycle #${i+1} (${cycle.length - 1} steps)</span>
-                <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${JSON.stringify(cycle)})'>
+                 <button class="btn" style="padding:2px 8px; font-size:10.5px;" onclick='highlightCycle(${escapeHtml(JSON.stringify(cycle))})'>
                   Highlight in Graph
                 </button>
               </div>
@@ -1611,13 +1667,13 @@
           const details = data.class_details?.[c];
           const bases = details?.bases?.length ? `(${details.bases.join(', ')})` : '';
           const methods = details?.methods?.length 
-            ? details.methods.map(m => `<div class="method-sig"><code>${m}</code></div>`).join('') 
+             ? details.methods.map(m => `<div class="method-sig"><code>${escapeHtml(m)}</code></div>`).join('')
             : '<div style="font-size:11px; color:var(--text-faint); margin:2px 0;">No public methods</div>';
 
           return `
             <div class="class-card">
               <div class="class-header">
-                <span class="class-kw">class</span> <strong style="color:#ffffff;">${c}</strong> <span class="class-bases">${bases}</span>
+                 <span class="class-kw">class</span> <strong style="color:#ffffff;">${escapeHtml(c)}</strong> <span class="class-bases">${escapeHtml(bases)}</span>
               </div>
               <div class="class-methods">
                 ${methods}
@@ -1633,7 +1689,7 @@
       const fnContainer = document.getElementById("insp-functions");
       if (data.functions.length > 0) {
         document.getElementById("insp-functions-section").style.display = "block";
-        fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${f}</span>`).join("");
+         fnContainer.innerHTML = data.functions.map(f => `<span class="symbol-pill">${escapeHtml(f)}</span>`).join("");
       } else {
         document.getElementById("insp-functions-section").style.display = "none";
       }
@@ -1642,8 +1698,8 @@
       const depsContainer = document.getElementById("insp-deps");
       if (data.internal_dependencies.length > 0) {
         depsContainer.innerHTML = data.internal_dependencies.map(d => `
-          <div class="dep-link" onclick="inspectModule('${d}'); highlightNodeConnections('${d}');">
-            <span>↳ ${d}</span>
+           <div class="dep-link" onclick="inspectModule(${escapeHtml(JSON.stringify(d))}); highlightNodeConnections(${escapeHtml(JSON.stringify(d))});">
+             <span>↳ ${escapeHtml(d)}</span>
             <span style="color:var(--accent);">inspect &rarr;</span>
           </div>
         `).join("");
@@ -1655,8 +1711,8 @@
       const impByContainer = document.getElementById("insp-imported-by");
       if (data.imported_by && data.imported_by.length > 0) {
         impByContainer.innerHTML = data.imported_by.map(ib => `
-          <div class="dep-link" onclick="inspectModule('${ib}'); highlightNodeConnections('${ib}');">
-            <span>↲ ${ib}</span>
+           <div class="dep-link" onclick="inspectModule(${escapeHtml(JSON.stringify(ib))}); highlightNodeConnections(${escapeHtml(JSON.stringify(ib))});">
+             <span>↲ ${escapeHtml(ib)}</span>
             <span style="color:var(--emerald);">imported by &rarr;</span>
           </div>
         `).join("");
@@ -1668,7 +1724,7 @@
       const extContainer = document.getElementById("insp-ext");
       if (data.external_dependencies && data.external_dependencies.length > 0) {
         document.getElementById("insp-ext-section").style.display = "block";
-        extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${e}</span>`).join("");
+         extContainer.innerHTML = data.external_dependencies.map(e => `<span class="ext-pill">${escapeHtml(e)}</span>`).join("");
       } else {
         document.getElementById("insp-ext-section").style.display = "none";
       }
@@ -1677,7 +1733,7 @@
       const stdlibContainer = document.getElementById("insp-stdlib");
       if (data.stdlib_dependencies && data.stdlib_dependencies.length > 0) {
         document.getElementById("insp-stdlib-section").style.display = "block";
-        stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${s}</span>`).join("");
+         stdlibContainer.innerHTML = data.stdlib_dependencies.map(s => `<span class="stdlib-pill">${escapeHtml(s)}</span>`).join("");
       } else {
         document.getElementById("insp-stdlib-section").style.display = "none";
       }

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repograph"
-version = "1.1.0"
-description = "Fast, deterministic codebase architecture explorer + Google Gemma open-weight AI architect engine."
+version = "1.2.0"
+description = "Deterministic Python codebase intelligence with dependency graphs, explainable metrics, and optional local open-weight AI."
 readme = "README.md"
 authors = [
     { name = "Sharan S" }

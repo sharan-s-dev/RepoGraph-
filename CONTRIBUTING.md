@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to **RepoGraph**!
 
-RepoGraph is built on a simple philosophy: **deterministic Abstract Syntax Tree (AST) analysis, instant execution, and zero third-party dependencies**.
+RepoGraph is built on a simple philosophy: **deterministic Abstract Syntax Tree (AST) analysis, explainable metrics, and zero third-party Python dependencies**. The generated dashboard has a native renderer fallback when its optional Mermaid CDN is unavailable.
 
 ---
 
@@ -28,7 +28,7 @@ RepoGraph requires Python 3.9+ and zero external pip dependencies.
 All contributions must pass the built-in test suite:
 
 ```bash
-python -m unittest discover tests
+python -m unittest discover -s tests -p "test*.py"
 ```
 
 To add new tests, place them in [`tests/test_repograph.py`](tests/test_repograph.py) using Python's standard `unittest` library.

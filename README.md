@@ -1,16 +1,16 @@
-# RepoGraph
+# RepoGraph — Deterministic Codebase Intelligence
 
-> **Deterministic Python Codebase Architecture & Dependency Graph Explorer + Google Gemma Open-Weight AI Architect Engine.**
+> **Turn an unfamiliar Python repository into an inspectable architecture map in seconds.**
 
 [![Python Version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![AI Engine](https://img.shields.io/badge/AI%20Engine-Google%20Gemma%202%20(Open--Weight)-8b5cf6.svg)](repograph.py)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/dependencies-0%20external-success.svg)](repograph.py)
+[![CLI Dependencies](https://img.shields.io/badge/CLI%20dependencies-0-success.svg)](repograph.py)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](repograph.py)
 [![Live Demo](https://img.shields.io/badge/GitHub%20Pages-Live%20Demo-22c55e.svg)](https://sharan-s-dev.github.io/RepoGraph-/)
 [![Hacktoberfest 2026](https://img.shields.io/badge/Hacktoberfest-2026%20Contender-f97316.svg)](https://dev.to/challenges/hacktoberfest-week3-2026-10-19)
 
-RepoGraph scans any Python codebase using Python's native Abstract Syntax Tree (AST) engine in under 0.1s and couples it with **Google's open-weight Gemma AI model** to generate an interactive architectural blueprint, detect software design patterns, and output step-by-step circular dependency remediation recipes.
+RepoGraph scans a Python codebase with the standard-library AST engine, produces a deterministic dependency graph and explainable metrics, then optionally asks a local open-weight model for architectural commentary. The factual graph never depends on an LLM. If no model is available, the report still works through deterministic synthesis.
 
 🌐 **[Open Live Web Interface](https://sharan-s-dev.github.io/RepoGraph-/)**
 
@@ -25,7 +25,7 @@ RepoGraph scans any Python codebase using Python's native Abstract Syntax Tree (
                  │
                  ▼
 ┌─────────────────────────────────┐
-│     Python Native AST Engine    │  < 0.1s execution (Zero external pip deps)
+│     Python Native AST Engine    │  Fast, deterministic (Zero external pip deps)
 │  - Class hierarchies & methods  │
 │  - Public functions & docstrings│
 │  - Relative/subpackage imports  │
@@ -60,20 +60,32 @@ RepoGraph scans any Python codebase using Python's native Abstract Syntax Tree (
 
 ---
 
+### The important boundary
+
+```text
+source files ──▶ Python AST ──▶ validated graph + metrics ──▶ HTML / Mermaid / JSON
+                                      │
+                                      └── optional local model narrative
+```
+
+The model can explain the graph; it cannot invent the graph. This separation makes RepoGraph useful for private repositories, reproducible in CI, and testable without model weights.
+
+---
+
 ## Why Open Innovation & Open-Weight AI (Gemma)?
 
-When analyzing proprietary or sensitive codebases, **developers cannot send private source code to closed cloud LLM APIs** due to IP exfiltration risks, compliance policies (HIPAA, SOC2, GDPR), and unpredictable per-token API costs.
+When analyzing proprietary or sensitive codebases, developers often cannot send private source code to closed cloud LLM APIs because of IP, compliance, and cost constraints. RepoGraph keeps deterministic analysis local and makes hosted inference an explicit opt-in rather than a hidden default.
 
 RepoGraph solves this through **open innovation with Google Gemma**:
-1. **100% Data Sovereignty:** Run `gemma2:2b` or `gemma2:9b` locally on your machine via Ollama or llama.cpp. Your proprietary code never leaves your local network.
-2. **Deterministic Speed + Open-Weight Reasoning:** AST extracts the factual dependency topology in 0.05 seconds, feeding a precise semantic summary to Gemma.
+1. **Data sovereignty by default:** Run `gemma2:2b` or `gemma2:9b` locally on your machine via Ollama or llama.cpp. In the default local path, proprietary code never leaves your local network.
+2. **Deterministic facts + open-weight reasoning:** AST extracts the factual dependency topology, then the optional model receives a compact semantic summary rather than raw source files.
 3. **Resilient Offline Fallback:** Even without an active local AI server running, RepoGraph's built-in synthesis engine produces structured architectural assessments without failing.
 
 ---
 
 ## Key Features
 
-- **Sub-0.1s Deterministic AST Parsing:** Uses Python's native `ast` module. Extracts class hierarchies, base classes, method signatures with arguments, docstrings, and cross-module import paths with mathematical accuracy.
+- **Deterministic AST Parsing:** Uses Python's native `ast` module. Extracts class hierarchies, base classes, method signatures with arguments, docstrings, imports, cycles, and graph metrics without an LLM.
 - **🤖 Gemma AI Architectural Intelligence:**
   - **Executive Architecture Narrative:** Synthesizes an executive overview of the project's responsibilities and workflows.
   - **Design Pattern Detection:** Identifies Clean N-Tier Architecture, Dispatcher/Facade, Domain Workflow Orchestrator, Data Entity Model, and Shared Services.
@@ -86,7 +98,7 @@ RepoGraph solves this through **open innovation with Google Gemma**:
 - **Deep Codebase Inspector:** Slide-out drawer displaying module docstrings, lines of code (LOC), branch complexity ratings, class hierarchies with base classes and public methods, clickable internal dependency links, and external / standard library dependencies.
 - **Layer Filtering & Instant Search:** Filter by architectural layer (*Application Entry, API, Core, Data, Utilities, Config*) or search classes and functions with instant diagram highlighting.
 - **Multi-Format Exports:** One-click export to vector SVG (with embedded fonts and styling), Mermaid Markdown, and GitHub-ready `ARCHITECTURE.md`.
-- **Zero Third-Party Dependencies:** Standard library only (`ast`, `argparse`, `json`, `os`, `re`, `sys`, `pathlib`, `socket`, `urllib`). No `pip install` required.
+- **Zero Python Runtime Dependencies:** Standard library only (`ast`, `argparse`, `json`, `os`, `re`, `sys`, `pathlib`, `socket`, `urllib`). No `pip install` is required for the CLI.
 
 ---
 
@@ -108,8 +120,9 @@ python repograph.py ./my-project --ai-model gemma2:2b --ai-provider ollama
 ```
 
 ### 2. Output Artifacts Generated
-- **`index.html` & `repograph.html`:** Self-contained interactive web dashboards with the Gemma AI Architect modal. Double-click to open in any browser.
+- **`index.html` & `repograph.html`:** Interactive dashboards with the Gemma AI Architect modal, Mermaid enhancement, and a built-in SVG fallback when the CDN is unavailable.
 - **`ARCHITECTURE.md`:** Valid Mermaid markdown diagram that renders natively inside GitHub READMEs and wikis, complete with the Gemma AI architectural assessment.
+- **`--json`:** Stable machine-readable report with `schema_version`, graph metrics, cycles, module records, and parse diagnostics. Progress logs go to stderr so the JSON is safe for pipes and CI.
 
 ### 3. Launch Built-in Local Server (Optional)
 ```bash
@@ -163,8 +176,10 @@ options:
 
 Run the built-in unit test suite (zero external test dependencies required):
 ```bash
-python -m unittest discover tests
+python -m unittest discover -s tests -p "test*.py"
 ```
+
+The suite covers AST extraction, import resolution, cycle detection, metric contracts, model-output validation, safe HTML embedding, and artifact generation.
 
 ---
 

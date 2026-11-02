@@ -20,6 +20,8 @@ from repograph import (
     generate_bulletproof_ast_mermaid,
     parse_args,
     build_unified_html,
+    build_json_report,
+    compute_graph_metrics,
     GemmaArchitectEngine
 )
 
@@ -169,6 +171,7 @@ def global_helper(x, y):
         self.assertIn("bark(volume)", visitor.class_details["Dog"]["methods"])
         self.assertIn("async fetch(item)", visitor.class_details["Dog"]["methods"])
         self.assertIn("global_helper(x, y)", visitor.functions)
+        self.assertNotIn("bark(volume)", visitor.functions)
         self.assertEqual(visitor.docstring, "Sample module docstring.")
 
 
@@ -218,6 +221,25 @@ class TestMermaidGeneration(unittest.TestCase):
         self.assertIn("graph TD", mmd)
         self.assertIn("app_py --> routes_py", mmd)
         self.assertIn("subgraph layer_Application_Entry", mmd)
+
+    def test_metrics_are_deterministic(self):
+        summary = {
+            "app.py": {"internal_dependencies": ["core.py"], "imported_by": [], "classes": [], "functions": [], "all_functions_count": 1, "loc": 10},
+            "core.py": {"internal_dependencies": [], "imported_by": ["app.py"], "classes": [], "functions": [], "all_functions_count": 2, "loc": 20},
+        }
+        metrics = compute_graph_metrics(summary, [])
+        self.assertEqual(metrics["modules"], 2)
+        self.assertEqual(metrics["internal_edges"], 1)
+        self.assertEqual(metrics["lines_of_code"], 30)
+        self.assertEqual(metrics["average_fan_out"], 0.5)
+
+    def test_json_report_has_stable_contract(self):
+        summary = {"app.py": {"internal_dependencies": [], "imported_by": [], "classes": [], "functions": [], "all_functions_count": 0, "loc": 1}}
+        report = build_json_report(summary, "Demo", [], {"parse_errors": []}, elapsed_ms=1.25)
+        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["tool"]["name"], "RepoGraph")
+        self.assertEqual(report["project"], "Demo")
+        self.assertEqual(report["metrics"]["scan_time_ms"], 1.25)
 
 
 class TestGemmaArchitectEngine(unittest.TestCase):
@@ -325,6 +347,20 @@ class TestGemmaArchitectEngine(unittest.TestCase):
         self.assertIn("Gemma AI Architect", html)
         self.assertIn("Top notch architecture.", html)
         self.assertIn("gemma-modal", html)
+
+    def test_html_escapes_script_breakout_content(self):
+        summary = {
+            "evil.py": {
+                "id": "evil_py", "layer": "Domain Services", "classes": [], "functions": [],
+                "internal_dependencies": [], "imported_by": [], "external_dependencies": [],
+                "stdlib_dependencies": [], "has_entry_point": False, "complexity": 1,
+                "loc": 1, "docstring": "</script><script>alert(1)</script>",
+                "full_docstring": "</script><script>alert(1)</script>", "class_details": {}
+            }
+        }
+        html = build_unified_html("graph TD\n", "graph LR\n", "<Repo>", summary)
+        self.assertNotIn("</script><script>alert(1)", html)
+        self.assertIn("\\u003c/script\\u003e", html)
 
 
 
